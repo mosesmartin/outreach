@@ -11,20 +11,25 @@ export const maxDuration = 60; // Allow 60s for PageSpeed API & Gemini
  * Secured via CRON_SECRET authorization header
  */
 export async function GET(req) {
-  // 1. Validate Cron Authorization
+  // 1. Validate Cron Authorization (via Bearer header or ?secret= query param)
   const authHeader = req.headers.get('authorization');
+  const url = new URL(req.url);
+  const secretParam = url.searchParams.get('secret') || url.searchParams.get('key');
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    // Check if called locally or directly without auth in development
-    const isDev = process.env.NODE_ENV === 'development';
-    if (!isDev) {
-      return NextResponse.json(
-        { error: 'Unauthorized: Invalid or missing CRON_SECRET' },
-        { status: 401 }
-      );
-    }
+  const isAuthorized =
+    !cronSecret ||
+    authHeader === `Bearer ${cronSecret}` ||
+    secretParam === cronSecret ||
+    process.env.NODE_ENV === 'development';
+
+  if (!isAuthorized) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Invalid or missing CRON_SECRET' },
+      { status: 401 }
+    );
   }
+
 
   if (!isSupabaseConfigured) {
     return NextResponse.json(
