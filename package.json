@@ -1,0 +1,40 @@
+{
+  "name": "synergytech-outreach-engine",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@supabase/supabase-js": "^2.49.1",
+    "bcryptjs": "^3.0.3",
+    "cheerio": "^1.0.0",
+    "clsx": "^2.1.1",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^0.477.0",
+    "next": "^14.2.25",
+    "nodemailer": "^6.10.0",
+    "papaparse": "^5.5.2",
+    "pdfkit": "^0.20.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.0.2",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.24",
+    "@types/nodemailer": "^6.4.17",
+    "@types/papaparse": "^5.3.15",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.2"
+  }
+}

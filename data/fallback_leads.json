@@ -1,0 +1,23 @@
+[
+  {
+    "id": "lead-1788693260729-8g0co",
+    "business_name": "DMZ",
+    "business_slug": "dmz",
+    "owner_name": "moses",
+    "email": "moses4martin@gmail.com",
+    "website_url": null,
+    "has_website": false,
+    "category": "Home & Commercial Services",
+    "city": "Austin, TX",
+    "services": [
+      "Residential Repairs",
+      "Emergency Response",
+      "Upfront Estimates"
+    ],
+    "rating": 4.9,
+    "review_count": 45,
+    "status": "PENDING",
+    "status_reason": "Queued for Funnel B Prototype",
+    "created_at": "2026-09-06T11:14:20.729Z"
+  }
+]

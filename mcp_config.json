@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "synergytech-outreach-engine": {
+      "command": "node",
+      "args": ["mcp/server.mjs"],
+      "env": {
+        "NODE_ENV": "production"
+      },
+      "description": "SynergyTech Unified Acquisition & Technical Diagnostic Engine MCP Server (Audit, Enrichment, Prototype, PDF & Outreach)"
+    }
+  }
+}

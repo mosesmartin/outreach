@@ -1,0 +1,6 @@
+business_name,owner_name,email,website_url,has_website,category,city,services
+Apex Austin Plumbing,Marcus,marcus@apexaustinplumbing.com,https://example.com,true,Plumbing Services,"Austin, TX","Drain Cleaning, Water Heater Repair, Pipe Leak Detection"
+Lone Star Auto Care,Sarah,sarah@lonestarautocare.com,https://github.com,true,Auto Repair,"Dallas, TX","Brake Inspection, Engine Diagnostics, Oil Change"
+Highland Precision Detailing,James,james@highlanddetailing.com,,false,Auto Detailing,"Houston, TX","Ceramic Coating, Paint Correction, Full Interior Detailing"
+Summit Roofing Experts,David,david@summitroofingexperts.com,,false,Roofing Contractor,"San Antonio, TX","Roof Replacement, Storm Damage Repair, Gutter Installation"
+Metro HVAC Solutions,Elena,elena@metrohvacsolutions.com,https://wikipedia.org,true,HVAC & Air Conditioning,"Austin, TX","AC Repair, Furnace Maintenance, Duct Cleaning"
