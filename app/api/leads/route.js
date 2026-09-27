@@ -5,7 +5,11 @@ import Papa from 'papaparse';
 import fs from 'fs';
 import path from 'path';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const BACKUP_FILE = path.join(process.cwd(), 'data', 'fallback_leads.json');
+
 
 function ensureDataDir() {
   const dir = path.join(process.cwd(), 'data');

@@ -212,13 +212,16 @@ export default function OutreachDashboard() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
+      const timestamp = Date.now();
       const [leadsRes, statsRes] = await Promise.all([
-        fetch('/api/leads').then((r) => r.json()),
-        fetch('/api/stats').then((r) => r.json()),
+        fetch(`/api/leads?_t=${timestamp}`, { cache: 'no-store' }).then((r) => r.json()),
+        fetch(`/api/stats?_t=${timestamp}`, { cache: 'no-store' }).then((r) => r.json()),
       ]);
 
-      if (leadsRes.leads) {
+      if (leadsRes && leadsRes.leads) {
         setLeads(leadsRes.leads);
+      } else {
+        setLeads([]);
       }
       if (statsRes && !statsRes.error) {
         setStats(statsRes);
@@ -229,6 +232,7 @@ export default function OutreachDashboard() {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchDashboardData();
