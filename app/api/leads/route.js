@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug';
+import { extractCleanEmail } from '@/lib/verifier';
+import { cleanPersonName } from '@/lib/crawler';
 import Papa from 'papaparse';
 import fs from 'fs';
 import path from 'path';
@@ -45,8 +47,10 @@ function saveFallbackLeads(leads) {
  */
 function normalizeLeadInput(raw) {
   const businessName = raw.business_name || raw.businessName || raw.title || raw.name || 'Unnamed Business';
-  const ownerName = raw.owner_name || raw.ownerName || raw.owner || raw.contact_name || 'Team';
+  const rawOwner = raw.owner_name || raw.ownerName || raw.owner || raw.contact_name || 'Team';
+  const ownerName = cleanPersonName(rawOwner);
   const rawEmail = raw.email || raw.contact_email || raw.mail || '';
+  const cleanEmail = extractCleanEmail(rawEmail);
   const websiteUrl = raw.website_url || raw.website || raw.url || raw.site || null;
   const hasWebsite = raw.has_website !== undefined 
     ? Boolean(raw.has_website && raw.has_website !== 'false' && raw.has_website !== '0' && raw.has_website !== false)
@@ -57,8 +61,8 @@ function normalizeLeadInput(raw) {
   const businessSlug = generateSlug(businessName);
   const phone = raw.phone || raw.telephone || raw.sanitizedPhone || null;
 
-  const hasValidEmail = Boolean(rawEmail && rawEmail.includes('@'));
-  const email = hasValidEmail ? rawEmail.trim().toLowerCase() : `contact@${businessSlug}.local`;
+  const hasValidEmail = Boolean(cleanEmail);
+  const email = cleanEmail || null;
 
   let services = [];
   if (Array.isArray(raw.services)) {
