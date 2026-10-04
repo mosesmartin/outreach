@@ -27,6 +27,20 @@ export async function POST(req) {
       }
 
       const enriched = await enrichSingleDomainLead(domain, businessName);
+
+      if (!enriched.isDeliverable || !enriched.email) {
+        return NextResponse.json({
+          success: true,
+          mode: 'SINGLE_DOMAIN',
+          enriched,
+          lead: null,
+          totalDiscovered: 1,
+          totalSaved: 0,
+          skipped: true,
+          message: 'Lead skipped (No verified deliverable email found). Not stored in database.',
+        });
+      }
+
       const supabase = getSupabaseAdmin();
       const slug = generateSlug(enriched.businessName);
 
@@ -40,7 +54,7 @@ export async function POST(req) {
         category: 'Enterprise & Professional Services',
         city: 'United States',
         status: 'PENDING',
-        status_reason: `Enriched via Autonomous Domain Discovery • ${enriched.isDeliverable ? 'Verified Inbox' : 'Permutation Synthesized'}`,
+        status_reason: `Enriched via Autonomous Domain Discovery • Verified Inbox`,
       };
 
       const { data: inserted, error: dbErr } = await supabase

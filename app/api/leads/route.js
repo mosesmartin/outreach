@@ -190,7 +190,7 @@ export async function POST(req) {
 
     const validLeads = rawItems
       .map(normalizeLeadInput)
-      .filter((l) => l.business_name && l.business_name !== 'Unnamed Business');
+      .filter((l) => l.business_name && l.business_name !== 'Unnamed Business' && l.status !== 'SKIPPED');
 
     if (validLeads.length === 0) {
       return NextResponse.json(
