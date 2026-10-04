@@ -1705,38 +1705,66 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
             {/* Scrollable Body */}
             <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 text-xs select-text">
               {/* 4-Pillar Universal SEO & GEO Metrics */}
-              {selectedLeadForReport.audit?.speed_score !== undefined && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">1. Google Speed</div>
-                    <div className="text-base font-bold text-blue-400">
-                      {selectedLeadForReport.audit.speed_score}/100
+              {selectedLeadForReport.audit?.speed_score !== undefined && (() => {
+                const spScore = Number(selectedLeadForReport.audit.speed_score) || 0;
+                const techScore = Number(selectedLeadForReport.audit.technical_score || selectedLeadForReport.audit.seo_score || 0);
+                const geoScore = Number(selectedLeadForReport.audit.geo_score || 0);
+                const localScore = Number(selectedLeadForReport.audit.local_schema_score || selectedLeadForReport.audit.schema_score || 0);
+                const compositeScore = Number(selectedLeadForReport.audit.composite_score) || Math.round((spScore + techScore + geoScore + localScore) / 4);
+                const isUnder50 = compositeScore < 50;
+
+                return (
+                  <div className="space-y-2.5">
+                    {/* Composite Benchmark Summary Banner */}
+                    <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                      isUnder50
+                        ? 'bg-rose-950/40 border-rose-500/30 text-rose-300'
+                        : 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+                    }`}>
+                      <span className="flex items-center gap-2 font-medium">
+                        <span className={`w-2 h-2 rounded-full ${isUnder50 ? 'bg-rose-400 animate-ping' : 'bg-emerald-400'}`} />
+                        <strong>Composite Benchmark:</strong> {compositeScore}/100 Average
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                        isUnder50 ? 'bg-rose-500/20 text-rose-200 border border-rose-500/40' : 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40'
+                      }`}>
+                        {isUnder50 ? 'QUALIFIED FOR OUTREACH (< 50)' : 'BENCHMARK PASSED (>= 50 SKIPPED)'}
+                      </span>
                     </div>
-                    <div className="text-[10px] text-slate-500 font-mono">LCP: {selectedLeadForReport.audit.lcp_seconds || '3.8s'}</div>
-                  </div>
-                  <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">2. Technical SEO</div>
-                    <div className="text-base font-bold text-emerald-400">
-                      {selectedLeadForReport.audit.technical_score || selectedLeadForReport.audit.seo_score || 75}/100
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">1. Google Speed</div>
+                        <div className={`text-base font-bold ${spScore < 50 ? 'text-rose-400' : 'text-blue-400'}`}>
+                          {spScore}/100
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">LCP: {selectedLeadForReport.audit.lcp_seconds || '3.8s'}</div>
+                      </div>
+                      <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">2. Technical SEO</div>
+                        <div className={`text-base font-bold ${techScore < 50 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {techScore}/100
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">Indexability</div>
+                      </div>
+                      <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">3. AI Search (GEO)</div>
+                        <div className={`text-base font-bold ${geoScore < 50 ? 'text-rose-400' : 'text-violet-400'}`}>
+                          {geoScore}/100
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">AI Overviews</div>
+                      </div>
+                      <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">4. Local Schema</div>
+                        <div className={`text-base font-bold ${localScore < 50 ? 'text-rose-400' : 'text-amber-400'}`}>
+                          {localScore}/100
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">Map Pack Entity</div>
+                      </div>
                     </div>
-                    <div className="text-[10px] text-slate-500 font-mono">Indexability</div>
                   </div>
-                  <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">3. AI Search (GEO)</div>
-                    <div className="text-base font-bold text-violet-400">
-                      {selectedLeadForReport.audit.geo_score || 50}/100
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-mono">AI Overviews</div>
-                  </div>
-                  <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">4. Local Schema</div>
-                    <div className="text-base font-bold text-amber-400">
-                      {selectedLeadForReport.audit.local_schema_score || selectedLeadForReport.audit.schema_score || 40}/100
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-mono">Map Pack Entity</div>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Attached PDF Notice */}
               {selectedLeadForReport.audit?.speed_score !== undefined && (

@@ -31,7 +31,8 @@ async function run() {
   console.log(`  2. Technical SEO & Indexability:   ${audit.technicalScore}/100  (HTTPS: ${audit.hasHttps}, OpenGraph: ${audit.hasOpenGraph})`);
   console.log(`  3. AI Citability (GEO / ChatGPT):  ${audit.geoScore}/100  (/llms.txt: ${audit.hasLlmsTxt}, FAQ Q&A: ${audit.hasFaqStructure})`);
   console.log(`  4. Local Schema & Map Pack Entity: ${audit.localSchemaScore}/100  (LocalBusiness: ${audit.hasLocalSchema}, 1-Tap Call: ${audit.hasClickToCall})`);
-  console.log(`  ⭐ Composite SEO Health:           ${audit.seoScore}/100`);
+  console.log(`  ⭐ 4-Pillar Composite Benchmark:   ${audit.compositeScore}/100  (${audit.compositeScore < 50 ? '🔴 QUALIFIED (<50)' : '🟢 PASSED BENCHMARK (>=50)'})`);
+
 
   console.log('\n⚠️ DIAGNOSTIC FINDINGS & GAPS:');
   if (audit.seoIssues && audit.seoIssues.length > 0) {

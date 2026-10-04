@@ -9,7 +9,7 @@
 ## ⚡ Key Highlights & Capabilities
 
 1. **Automated Dual-Funnel Architecture**:
-   - **Funnel A (Website Exists)**: Runs mobile Google PageSpeed Insights + Cheerio On-Page SEO audit. If bottlenecks are found (Speed < 70 or SEO < 75), Gemini creates a casual teardown hook and dispatches a plain-text technical benchmark email. High-performing sites are marked `SKIPPED`.
+   - **Funnel A (Website Exists)**: Runs mobile Google PageSpeed Insights + Technical SEO, AI Citability (GEO) & Local Schema audit. If composite benchmark is below 50 (< 50), Gemini creates a casual teardown hook and dispatches a 4-pillar executive PDF + technical outreach email. Sites with composite average >= 50 are marked `SKIPPED`.
    - **Funnel B (No Website Found)**: Instantly mounts a mobile-first responsive landing page prototype at `/demo/[slug]`. Gemini composes a casual pitch hook and dispatches a plain-text live prototype offer email.
 2. **Safe 1-Hour Controlled Dispatch**:
    - Vercel Cron (`0 9-15 * * 1-5`) queries strictly **1 lead per hour** during business hours, preventing spam triggers and guaranteeing highest inbox deliverability.
