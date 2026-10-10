@@ -33,13 +33,17 @@ import {
   AlertTriangle,
   LogOut,
   Shield,
+  ShieldCheck,
   User,
   Zap
 } from 'lucide-react';
+import GeminiFileChat from '@/components/GeminiFileChat';
+import AiHumanizer from '@/components/AiHumanizer';
 
 export default function OutreachDashboard() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState(null);
+  const [currentTab, setCurrentTab] = useState('LEADS'); // 'LEADS' | 'GEMINI_CHAT' | 'HUMANIZER'
   const [leads, setLeads] = useState([]);
   const [stats, setStats] = useState({
     configured: false,
@@ -600,8 +604,86 @@ export default function OutreachDashboard() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-8">
+      {/* Top Navigation Tab Switcher */}
+      <nav className="border-b border-slate-800/90 bg-[#090e1a]/95 backdrop-blur-md sticky top-16 z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+          <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto py-1.5 scrollbar-none">
+            <button
+              onClick={() => setCurrentTab('LEADS')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+                currentTab === 'LEADS'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Gauge className="w-3.5 h-3.5" />
+              <span>Leads Acquisition Engine</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                currentTab === 'LEADS' ? 'bg-blue-700/80 text-blue-100' : 'bg-slate-800 text-slate-400'
+              }`}>
+                {stats.totalLeads || leads.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setCurrentTab('GEMINI_CHAT')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+                currentTab === 'GEMINI_CHAT'
+                  ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-cyan-600/25'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5" />
+              <span>Gemini File Chat (Prompt AI)</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                currentTab === 'GEMINI_CHAT' ? 'bg-cyan-800/80 text-cyan-100' : 'bg-slate-800 text-slate-400'
+              }`}>
+                Files Context
+              </span>
+            </button>
+
+            <button
+              onClick={() => setCurrentTab('HUMANIZER')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+                currentTab === 'HUMANIZER'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>AI Humanizer & Anti-Plagiarism</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                currentTab === 'HUMANIZER' ? 'bg-emerald-800/80 text-emerald-100' : 'bg-slate-800 text-slate-400'
+              }`}>
+                Anti-Detector
+              </span>
+            </button>
+          </div>
+
+          <div className="hidden md:flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Gemini 3.8 Flash Online</span>
+          </div>
+        </div>
+      </nav>
+
+      {/* Dynamic Tab Body: Gemini File Chat */}
+      {currentTab === 'GEMINI_CHAT' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+          <GeminiFileChat />
+        </main>
+      )}
+
+      {/* Dynamic Tab Body: AI Humanizer */}
+      {currentTab === 'HUMANIZER' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+          <AiHumanizer />
+        </main>
+      )}
+
+      {/* Dynamic Tab Body: Leads Acquisition Engine */}
+      {currentTab === 'LEADS' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-8">
         
         {/* Supabase status notice if not yet connected */}
         {!loading && !stats.configured && (
@@ -1072,6 +1154,7 @@ export default function OutreachDashboard() {
         </div>
 
       </main>
+      )}
 
       {/* MODAL 1: Live Lead Discovery (Apify & AI Enrichment) */}
       {showDiscoveryModal && (

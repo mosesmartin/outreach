@@ -11,6 +11,7 @@ export function middleware(request) {
     pathname.startsWith('/demo') ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/cron') ||
+    pathname.startsWith('/api/gemini') ||
     pathname.startsWith('/_next') ||
     pathname.includes('/favicon.ico');
 
