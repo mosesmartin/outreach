@@ -158,7 +158,9 @@ export default function GeminiFileChat() {
 
     try {
       const payload = {
-        messages: newHistory.map((m) => ({ role: m.role, content: m.content })),
+        messages: newHistory
+          .filter((m) => !m.isError)
+          .map((m) => ({ role: m.role, content: m.content })),
         systemPrompt,
         files: attachedFiles,
         model: selectedModel,

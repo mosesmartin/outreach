@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import GeminiFileChat from '@/components/GeminiFileChat';
 import AiHumanizer from '@/components/AiHumanizer';
+import { TRENDING_OPPORTUNITIES } from '@/lib/trends';
 
 export default function OutreachDashboard() {
   const router = useRouter();
@@ -1283,6 +1284,50 @@ export default function OutreachDashboard() {
                   </div>
                 ) : (
                   <>
+                    {/* High-Demand US Search Trends & Conversion Hotspots */}
+                    <div className="space-y-2 p-3 bg-gradient-to-r from-blue-950/30 via-slate-950 to-indigo-950/30 rounded-xl border border-cyan-500/30">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white flex items-center gap-1.5 text-[11px]">
+                          <Zap className="w-3.5 h-3.5 text-amber-400" />
+                          🔥 High-Demand Trends & Search Hotspots (1-Click Fill):
+                        </span>
+                        <span className="text-[10px] text-cyan-400 font-mono">Live Search Intent</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                        {TRENDING_OPPORTUNITIES.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setDiscoveryNiche(item.niche);
+                              setDiscoveryLocation(item.location);
+                            }}
+                            className={`p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 border text-left transition group cursor-pointer ${
+                              discoveryNiche === item.niche && discoveryLocation === item.location
+                                ? 'border-cyan-400 bg-cyan-950/40 shadow-sm shadow-cyan-500/20'
+                                : 'border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-bold text-white group-hover:text-cyan-300 truncate">
+                                {item.niche.split(' ')[0]} • {item.state}
+                              </span>
+                              <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-300 font-mono">
+                                {item.growthTrend.split(' ')[0]}
+                              </span>
+                            </div>
+                            <div className="text-[9px] text-slate-400 truncate font-mono">
+                              {item.location} ({item.searchVolume})
+                            </div>
+                            <div className="text-[9px] text-cyan-400/80 truncate mt-0.5">
+                              {item.primaryGap}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div>
                         <label className="block text-slate-300 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
@@ -1794,24 +1839,24 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
                 const geoScore = Number(selectedLeadForReport.audit.geo_score || 0);
                 const localScore = Number(selectedLeadForReport.audit.local_schema_score || selectedLeadForReport.audit.schema_score || 0);
                 const compositeScore = Number(selectedLeadForReport.audit.composite_score) || Math.round((spScore + techScore + geoScore + localScore) / 4);
-                const isUnder50 = compositeScore < 50;
+                const hasBottlenecks = spScore < 75 || techScore < 75 || geoScore < 70 || localScore < 70 || compositeScore < 75;
 
                 return (
                   <div className="space-y-2.5">
                     {/* Composite Benchmark Summary Banner */}
                     <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
-                      isUnder50
+                      hasBottlenecks
                         ? 'bg-rose-950/40 border-rose-500/30 text-rose-300'
                         : 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
                     }`}>
                       <span className="flex items-center gap-2 font-medium">
-                        <span className={`w-2 h-2 rounded-full ${isUnder50 ? 'bg-rose-400 animate-ping' : 'bg-emerald-400'}`} />
+                        <span className={`w-2 h-2 rounded-full ${hasBottlenecks ? 'bg-rose-400 animate-ping' : 'bg-emerald-400'}`} />
                         <strong>Composite Benchmark:</strong> {compositeScore}/100 Average
                       </span>
                       <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
-                        isUnder50 ? 'bg-rose-500/20 text-rose-200 border border-rose-500/40' : 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40'
+                        hasBottlenecks ? 'bg-rose-500/20 text-rose-200 border border-rose-500/40' : 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40'
                       }`}>
-                        {isUnder50 ? 'QUALIFIED FOR OUTREACH (< 50)' : 'BENCHMARK PASSED (>= 50 SKIPPED)'}
+                        {hasBottlenecks ? '⚠️ BOTTLENECKS DETECTED (QUALIFIED)' : '✅ HIGH PERFORMANCE (BENCHMARK PASSED)'}
                       </span>
                     </div>
 
@@ -1892,14 +1937,30 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
             {/* Sticky Footer */}
             <div className="p-3.5 sm:p-4 border-t border-slate-800/80 flex items-center justify-between shrink-0 bg-[#0c1322] sticky bottom-0 z-10">
               <div className="text-[11px] text-slate-500">
-                Dispatched: {selectedLeadForReport.audit?.sent_at ? new Date(selectedLeadForReport.audit.sent_at).toLocaleString() : 'N/A'}
+                Dispatched: {selectedLeadForReport.audit?.sent_at ? new Date(selectedLeadForReport.audit.sent_at).toLocaleString() : 'Pending Review'}
               </div>
-              <button
-                onClick={() => setSelectedLeadForReport(null)}
-                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedLeadForReport.lead?.status !== 'SENT' && (
+                  <button
+                    onClick={() => {
+                      const leadIdToRun = selectedLeadForReport.lead?.id;
+                      setSelectedLeadForReport(null);
+                      if (leadIdToRun) handleProcessNext(leadIdToRun);
+                    }}
+                    disabled={isProcessing}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 disabled:opacity-40 text-white rounded-xl text-xs font-semibold shadow-lg shadow-cyan-500/20 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send Cold Email Now</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedLeadForReport(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -41,6 +41,29 @@ export async function POST(req) {
         });
       }
 
+      // Pre-Audit Check: Discard if website already passes all benchmarks with zero bottlenecks
+      if (enriched.audit) {
+        const isHighPerformance =
+          enriched.audit.speedScore >= 75 &&
+          parseFloat(enriched.audit.lcpSeconds) <= 2.8 &&
+          enriched.audit.technicalScore >= 75 &&
+          enriched.audit.geoScore >= 75 &&
+          enriched.audit.localSchemaScore >= 75;
+
+        if (isHighPerformance) {
+          return NextResponse.json({
+            success: true,
+            mode: 'SINGLE_DOMAIN',
+            enriched,
+            lead: null,
+            totalDiscovered: 1,
+            totalSaved: 0,
+            skipped: true,
+            message: `Lead skipped: "${enriched.businessName}" website already passed all performance & SEO benchmarks (${enriched.audit.speedScore}/100 Speed, ${enriched.audit.geoScore}/100 GEO). Not stored in database.`,
+          });
+        }
+      }
+
       const supabase = getSupabaseAdmin();
       const slug = generateSlug(enriched.businessName);
 
@@ -62,6 +85,28 @@ export async function POST(req) {
         .insert(leadRecord)
         .select()
         .single();
+
+      if (inserted && enriched.audit) {
+        try {
+          await supabase.from('audit_reports').insert({
+            lead_id: inserted.id,
+            speed_score: enriched.audit.speedScore,
+            lcp_seconds: enriched.audit.lcpSeconds,
+            page_size_mb: enriched.audit.pageSizeMb,
+            technical_score: enriched.audit.technicalScore,
+            geo_score: enriched.audit.geoScore,
+            local_schema_score: enriched.audit.localSchemaScore,
+            composite_score: enriched.audit.compositeScore,
+            seo_score: enriched.audit.seoScore,
+            seo_issues: enriched.audit.seoIssues,
+            actionable_fixes: enriched.audit.actionableFixes,
+            gemini_hook: null,
+            sent_at: null,
+          });
+        } catch (auditErr) {
+          console.warn('[Single Domain Audit Report Save Notice]:', auditErr.message);
+        }
+      }
 
       return NextResponse.json({
         success: true,

@@ -12,6 +12,53 @@ const DEFAULT_MODELS = [
   'gemini-flash-latest',
 ];
 
+/**
+ * Sanitizes chat history for the Google Generative AI SDK.
+ * Strict rules enforced by Google:
+ * 1. The first item in history MUST have role 'user' (never 'model').
+ * 2. Turns must strictly alternate (user -> model -> user -> model).
+ * 3. History must end with 'model' because the next message sent via sendMessage() is 'user'.
+ */
+function buildValidGeminiHistory(previousMessages) {
+  if (!Array.isArray(previousMessages) || previousMessages.length === 0) {
+    return [];
+  }
+
+  const valid = [];
+  for (const m of previousMessages) {
+    if (!m || !m.content || typeof m.content !== 'string' || m.isError) continue;
+    const role = (m.role === 'assistant' || m.role === 'model') ? 'model' : 'user';
+    valid.push({ role, content: m.content });
+  }
+
+  // Drop any leading 'model' messages (e.g. initial greeting from assistant)
+  while (valid.length > 0 && valid[0].role === 'model') {
+    valid.shift();
+  }
+
+  if (valid.length === 0) return [];
+
+  // Collapse consecutive turns of the same role
+  const formatted = [];
+  for (const item of valid) {
+    if (formatted.length > 0 && formatted[formatted.length - 1].role === item.role) {
+      formatted[formatted.length - 1].parts[0].text += `\n\n${item.content}`;
+    } else {
+      formatted.push({
+        role: item.role,
+        parts: [{ text: item.content }],
+      });
+    }
+  }
+
+  // Must end with 'model' so that the new turn is 'user'
+  while (formatted.length > 0 && formatted[formatted.length - 1].role === 'user') {
+    formatted.pop();
+  }
+
+  return formatted;
+}
+
 export async function POST(req) {
   try {
     const body = await req.json();
@@ -78,6 +125,7 @@ Provide direct, clean, actionable, high-quality responses. If code is requested,
     // Extract the latest user message
     const latestUserMsg = messages[messages.length - 1];
     const previousHistory = messages.slice(0, -1);
+    const sanitizedHistory = buildValidGeminiHistory(previousHistory);
 
     // Assemble the prompt content
     const combinedUserContent = fileContextBlock
@@ -91,16 +139,10 @@ Provide direct, clean, actionable, high-quality responses. If code is requested,
           systemInstruction: effectiveSystemInstruction,
         });
 
-        // Convert prior history into Gemini SDK format if available
         let result;
-        if (previousHistory.length > 0) {
-          const formattedHistory = previousHistory.map((m) => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }],
-          }));
-
+        if (sanitizedHistory.length > 0) {
           const chat = generativeModel.startChat({
-            history: formattedHistory,
+            history: sanitizedHistory,
           });
           result = await chat.sendMessage(combinedUserContent);
         } else {
