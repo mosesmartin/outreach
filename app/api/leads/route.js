@@ -315,7 +315,10 @@ export async function POST(req) {
         const supabase = getSupabaseAdmin();
         const recordsToInsert = validLeads.map((l) => {
           const { id, ...rest } = l;
-          return rest;
+          return {
+            ...rest,
+            email: rest.email || `${rest.business_slug}@leads.synergytechsol.com`,
+          };
         });
 
         const { data, error } = await supabase

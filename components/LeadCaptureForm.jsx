@@ -7,15 +7,22 @@ export default function LeadCaptureForm({
   businessName, 
   city, 
   services = [],
-  theme = null
+  theme = null,
+  initialNote = '',
 }) {
   const [submitted, setSubmitted] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    service: (services && services[0]) || 'General Inquiry',
-    note: '',
+    service: (services && services[0]?.title) || (typeof services[0] === 'string' ? services[0] : 'General Service Inquiry'),
+    note: initialNote || '',
   });
+
+  React.useEffect(() => {
+    if (initialNote) {
+      setFormData((prev) => ({ ...prev, note: initialNote }));
+    }
+  }, [initialNote]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 

@@ -2,6 +2,9 @@
 
 import React, { useState } from 'react';
 import LeadCaptureForm from './LeadCaptureForm';
+import BeforeAfterSlider from './BeforeAfterSlider';
+import ProjectCostCalculator from './ProjectCostCalculator';
+import WhatsAppFloatButton from './WhatsAppFloatButton';
 import { INDUSTRY_THEMES } from '@/lib/demoThemes';
 import {
   Phone,
@@ -39,6 +42,7 @@ export default function DemoPrototypeClient({ initialLead, initialTheme }) {
   const [activeThemeKey, setActiveThemeKey] = useState(initialTheme?.key || 'TRAVEL_TOURISM');
   const [isLightMode, setIsLightMode] = useState(false);
   const [activeMenuTab, setActiveMenuTab] = useState(0);
+  const [lockedEstimate, setLockedEstimate] = useState(null);
 
   // Active theme resolved from selected key or initial theme
   const theme = INDUSTRY_THEMES[activeThemeKey] || initialTheme;
@@ -270,6 +274,7 @@ export default function DemoPrototypeClient({ initialLead, initialTheme }) {
                 city={city}
                 services={servicesToRender}
                 theme={theme}
+                initialNote={lockedEstimate ? `[Selected Estimate]: ${lockedEstimate.tierName} (${lockedEstimate.estimatedRange}) with 15% web special locked in.` : ''}
               />
             </div>
 
@@ -722,6 +727,15 @@ export default function DemoPrototypeClient({ initialLead, initialTheme }) {
         </div>
       </section>
 
+      {/* 🎚️ INTERACTIVE BEFORE / AFTER SHOWCASE SLIDER */}
+      <BeforeAfterSlider
+        themeKey={activeThemeKey}
+        businessName={businessName}
+        city={city}
+        theme={theme}
+        isLightMode={isLightMode}
+      />
+
       {/* Standard Services Section */}
       <section className="py-16 border-t border-slate-800/80" id="services">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
@@ -777,6 +791,16 @@ export default function DemoPrototypeClient({ initialLead, initialTheme }) {
           </div>
         </div>
       </section>
+
+      {/* 🧮 INTERACTIVE PROJECT COST & PRICING ESTIMATOR */}
+      <ProjectCostCalculator
+        businessName={businessName}
+        city={city}
+        category={category}
+        theme={theme}
+        isLightMode={isLightMode}
+        onSelectEstimate={(est) => setLockedEstimate(est)}
+      />
 
       {/* Verified Reviews Section */}
       <section className="py-16 border-t border-slate-800/80">
@@ -884,6 +908,13 @@ export default function DemoPrototypeClient({ initialLead, initialTheme }) {
           <span>Get Quote</span>
         </a>
       </div>
+
+      {/* 💬 FLOATING DIRECT 1-TAP WHATSAPP ACTION BUTTON */}
+      <WhatsAppFloatButton
+        phone={initialLead.phone}
+        businessName={businessName}
+        city={city}
+      />
     </div>
   );
 }
