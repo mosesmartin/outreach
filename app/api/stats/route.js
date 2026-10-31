@@ -1,65 +1,67 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import fs from 'fs';
+import path from 'path';
 
 export const dynamic = 'force-dynamic';
 
+const BACKUP_FILE = path.join(process.cwd(), 'data', 'fallback_leads.json');
+
+function loadFallbackLeads() {
+  if (fs.existsSync(BACKUP_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(BACKUP_FILE, 'utf8') || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function extractPhone(lead) {
+  if (lead.phone) return lead.phone;
+  if (!lead.status_reason) return null;
+  const match = lead.status_reason.match(/(?:Phone:\s*|tel:)([\+\d\s\(\)\-\.]{7,25})/i);
+  return match ? match[1].trim() : null;
+}
+
 export async function GET() {
-  if (!isSupabaseConfigured) {
-    return NextResponse.json({
-      configured: false,
-      totalLeads: 0,
-      pending: 0,
-      sent: 0,
-      skipped: 0,
-      failed: 0,
-      withWebsite: 0,
-      noWebsite: 0,
-      avgSpeedScore: 0,
-      avgSeoScore: 0,
-    });
+  let leads = [];
+
+  if (isSupabaseConfigured) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*');
+
+      if (!error && data) {
+        leads = data;
+      }
+    } catch (err) {
+      console.warn('Stats Supabase query warning:', err.message);
+    }
   }
 
-  try {
-    const supabase = getSupabaseAdmin();
-
-    const [leadsRes, auditRes] = await Promise.all([
-      supabase.from('leads').select('status, has_website'),
-      supabase.from('audit_reports').select('speed_score, seo_score'),
-    ]);
-
-    const leads = leadsRes.data || [];
-    const audits = auditRes.data || [];
-
-    const stats = {
-      configured: true,
-      totalLeads: leads.length,
-      pending: leads.filter((l) => l.status === 'PENDING').length,
-      sent: leads.filter((l) => l.status === 'SENT').length,
-      skipped: leads.filter((l) => l.status === 'SKIPPED').length,
-      failed: leads.filter((l) => l.status === 'FAILED').length,
-      qualified: leads.filter((l) => l.status === 'QUALIFIED').length,
-      withWebsite: leads.filter((l) => l.has_website).length,
-      noWebsite: leads.filter((l) => !l.has_website).length,
-      avgSpeedScore: 0,
-      avgSeoScore: 0,
-    };
-
-    const validSpeeds = audits.filter((a) => typeof a.speed_score === 'number' && a.speed_score > 0);
-    if (validSpeeds.length > 0) {
-      stats.avgSpeedScore = Math.round(
-        validSpeeds.reduce((acc, curr) => acc + (curr.speed_score || 0), 0) / validSpeeds.length
-      );
-    }
-
-    const validSeo = audits.filter((a) => typeof a.seo_score === 'number' && a.seo_score > 0);
-    if (validSeo.length > 0) {
-      stats.avgSeoScore = Math.round(
-        validSeo.reduce((acc, curr) => acc + (curr.seo_score || 0), 0) / validSeo.length
-      );
-    }
-
-    return NextResponse.json(stats);
-  } catch (error) {
-    return NextResponse.json({ error: error?.message || 'Failed to calculate stats' }, { status: 500 });
+  // Fallback if supabase returns empty or error
+  if (leads.length === 0) {
+    leads = loadFallbackLeads();
   }
+
+  const withPhoneCount = leads.filter((l) => Boolean(extractPhone(l))).length;
+
+  const stats = {
+    configured: true,
+    totalLeads: leads.length,
+    pending: leads.filter((l) => l.status === 'PENDING').length,
+    sent: leads.filter((l) => l.status === 'SENT').length,
+    qualified: leads.filter((l) => l.status === 'QUALIFIED').length,
+    skipped: leads.filter((l) => l.status === 'SKIPPED').length,
+    failed: leads.filter((l) => l.status === 'FAILED').length,
+    withPhone: withPhoneCount,
+    noWebsite: leads.filter((l) => !l.has_website).length,
+    prototypesReady: leads.length,
+  };
+
+  return NextResponse.json(stats);
 }

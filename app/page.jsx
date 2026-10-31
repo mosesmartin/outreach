@@ -35,7 +35,11 @@ import {
   Shield,
   ShieldCheck,
   User,
-  Zap
+  Zap,
+  Phone,
+  MessageCircle,
+  Trash2,
+  Smartphone
 } from 'lucide-react';
 import GeminiFileChat from '@/components/GeminiFileChat';
 import AiHumanizer from '@/components/AiHumanizer';
@@ -62,7 +66,28 @@ export default function OutreachDashboard() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [funnelFilter, setFunnelFilter] = useState('ALL');
+  const [channelFilter, setChannelFilter] = useState('ALL');
+
+  const extractPhoneFallback = (reason) => {
+    if (!reason || typeof reason !== 'string') return null;
+    const match = reason.match(/(?:Phone:\s*|tel:)([\+\d\s\(\)\-\.]{7,25})/i);
+    return match ? match[1].trim() : null;
+  };
+
+  const getWhatsAppUrl = (lead) => {
+    const phone = lead.phone || extractPhoneFallback(lead.status_reason);
+    if (!phone) return null;
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const slug = lead.business_slug || (lead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const appBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://synergytechsol.com';
+    const demoUrl = `${appBaseUrl}/demo/${slug}`;
+    const owner = lead.owner_name && lead.owner_name !== 'Team' && !lead.owner_name.toLowerCase().includes('leadership')
+      ? lead.owner_name.split(' ')[0]
+      : lead.business_name;
+    
+    const text = `Hi ${owner}, I saw your ${lead.rating || 4.9}★ reviews on Google Maps in ${lead.city || 'your area'}. Noticed you don't have an official website yet, so our team built a live mobile prototype specifically for ${lead.business_name}: ${demoUrl} - Take a look on your phone and let me know your thoughts!`;
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+  };
 
   // Modals
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
@@ -169,16 +194,17 @@ export default function OutreachDashboard() {
     document.body.removeChild(link);
   };
 
-  // Single Lead Form State
+  // Single Lead Form State (Focused on No-Website Targets with Phone / WhatsApp)
   const [newLead, setNewLead] = useState({
     business_name: '',
     owner_name: '',
+    phone: '',
     email: '',
     website_url: '',
-    has_website: true,
+    has_website: false,
     category: 'Home & Commercial Services',
-    city: 'Austin, TX',
-    services: 'Residential Repairs, Emergency Response, Upfront Estimates',
+    city: 'Dallas, TX',
+    services: 'Rapid Quotes, Verified Service, Direct Booking',
   });
 
   // CSV Drag and drop / file input
@@ -239,9 +265,40 @@ export default function OutreachDashboard() {
   };
 
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  const handleClearAllData = async () => {
+    if (!window.confirm('Are you sure you want to delete all leads and reset the database? This cannot be undone.')) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/leads', { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        setLeads([]);
+        setStats({
+          configured: true,
+          totalLeads: 0,
+          pending: 0,
+          sent: 0,
+          skipped: 0,
+          failed: 0,
+          qualified: 0,
+          withPhone: 0,
+          withWebsite: 0,
+          noWebsite: 0,
+          prototypesReady: 0,
+        });
+        alert('All old leads have been completely cleared.');
+      } else {
+        alert(data.error || 'Failed to clear data');
+      }
+    } catch (e) {
+      alert(e.message || 'Error clearing data');
+    } finally {
+      setLoading(false);
+      await fetchDashboardData();
+    }
+  };
 
   const handleProcessNext = async (specificLeadId) => {
     const targetLead = specificLeadId
@@ -380,12 +437,13 @@ export default function OutreachDashboard() {
       const payload = {
         business_name: newLead.business_name,
         owner_name: newLead.owner_name || 'Team',
-        email: newLead.email,
-        website_url: newLead.has_website ? newLead.website_url : null,
-        has_website: newLead.has_website,
+        phone: newLead.phone || null,
+        email: newLead.email || null,
+        website_url: null,
+        has_website: false,
         category: newLead.category,
         city: newLead.city,
-        services: newLead.services.split(',').map((s) => s.trim()).filter(Boolean),
+        services: newLead.services ? newLead.services.split(',').map((s) => s.trim()).filter(Boolean) : [],
       };
 
       const res = await fetch('/api/leads', {
@@ -399,12 +457,13 @@ export default function OutreachDashboard() {
         setNewLead({
           business_name: '',
           owner_name: '',
+          phone: '',
           email: '',
           website_url: '',
-          has_website: true,
+          has_website: false,
           category: 'Home & Commercial Services',
-          city: 'Austin, TX',
-          services: 'Residential Repairs, Emergency Response, Upfront Estimates',
+          city: 'Dallas, TX',
+          services: 'Rapid Quotes, Verified Service, Direct Booking',
         });
         await fetchDashboardData();
       } else {
@@ -521,18 +580,20 @@ export default function OutreachDashboard() {
 
   // Filtered Leads
   const filteredLeads = leads.filter((lead) => {
+    const phone = lead.phone || extractPhoneFallback(lead.status_reason) || '';
     const matchesSearch =
       (lead.business_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (lead.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (lead.city && lead.city.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesStatus = statusFilter === 'ALL' || lead.status === statusFilter;
-    const matchesFunnel =
-      funnelFilter === 'ALL' ||
-      (funnelFilter === 'WITH_WEBSITE' && lead.has_website) ||
-      (funnelFilter === 'NO_WEBSITE' && !lead.has_website);
+    const matchesChannel =
+      channelFilter === 'ALL' ||
+      (channelFilter === 'WITH_PHONE' && Boolean(phone)) ||
+      (channelFilter === 'WITH_EMAIL' && Boolean(lead.email));
 
-    return matchesSearch && matchesStatus && matchesFunnel;
+    return matchesSearch && matchesStatus && matchesChannel;
   });
 
   return (
@@ -721,79 +782,79 @@ export default function OutreachDashboard() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
             <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-              <span>Total Ingested</span>
-              <Layers className="w-4 h-4 text-slate-400" />
+              <span>No-Website Leads</span>
+              <Layers className="w-4 h-4 text-cyan-400" />
             </div>
             <div className="text-2xl font-bold text-white mt-2">
               {stats.totalLeads || leads.length}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              {stats.withWebsite} Web / {stats.noWebsite} No-Web
+              Prime Acquisition Targets
+            </div>
+          </div>
+
+          <div className="bg-[#0f172a]/90 border border-emerald-500/20 rounded-xl p-4 shadow-sm bg-gradient-to-b from-emerald-950/20 to-transparent">
+            <div className="flex items-center justify-between text-emerald-400 text-xs font-medium">
+              <span>Verified Phone/WA</span>
+              <Phone className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="text-2xl font-bold text-emerald-300 mt-2">
+              {stats.withPhone || leads.filter(l => Boolean(l.phone || extractPhoneFallback(l.status_reason))).length}
+            </div>
+            <div className="text-[11px] text-emerald-500/80 mt-1 font-medium">
+              1-Tap WhatsApp & Call Ready
+            </div>
+          </div>
+
+          <div className="bg-[#0f172a]/90 border border-indigo-500/20 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between text-indigo-400 text-xs font-medium">
+              <span>Live Prototypes</span>
+              <Sparkles className="w-4 h-4 text-indigo-400" />
+            </div>
+            <div className="text-2xl font-bold text-indigo-300 mt-2">
+              {leads.length}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">
+              Mounted at /demo/[slug]
             </div>
           </div>
 
           <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between text-amber-400 text-xs font-medium">
-              <span>Pending Queue</span>
-              <Clock className="w-4 h-4 text-amber-400" />
+            <div className="flex items-center justify-between text-purple-400 text-xs font-medium">
+              <span>Qualified Queue</span>
+              <Smartphone className="w-4 h-4 text-purple-400" />
             </div>
-            <div className="text-2xl font-bold text-amber-300 mt-2">
-              {stats.pending}
+            <div className="text-2xl font-bold text-purple-300 mt-2">
+              {stats.qualified || leads.filter(l => l.status === 'QUALIFIED').length}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              Ready for 1/hr cron
+              Ready for Direct Outreach
             </div>
           </div>
 
           <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
             <div className="flex items-center justify-between text-emerald-400 text-xs font-medium">
-              <span>Dispatched</span>
+              <span>Dispatched Emails</span>
               <Send className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-2xl font-bold text-emerald-300 mt-2">
-              {stats.sent}
+              {stats.sent || 0}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              Cold emails delivered
+              Cold offers delivered
             </div>
           </div>
 
           <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between text-indigo-400 text-xs font-medium">
-              <span>Skipped Filter</span>
-              <UserCheck className="w-4 h-4 text-indigo-400" />
+            <div className="flex items-center justify-between text-amber-400 text-xs font-medium">
+              <span>Pending</span>
+              <Clock className="w-4 h-4 text-amber-400" />
             </div>
-            <div className="text-2xl font-bold text-indigo-300 mt-2">
-              {stats.skipped}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Passed high scores
-            </div>
-          </div>
-
-          <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between text-blue-400 text-xs font-medium">
-              <span>Avg PageSpeed</span>
-              <Gauge className="w-4 h-4 text-blue-400" />
-            </div>
-            <div className="text-2xl font-bold text-blue-300 mt-2">
-              {stats.avgSpeedScore ? `${stats.avgSpeedScore}/100` : '--'}
+            <div className="text-2xl font-bold text-amber-300 mt-2">
+              {stats.pending || 0}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              Mobile audit index
-            </div>
-          </div>
-
-          <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between text-cyan-400 text-xs font-medium">
-              <span>Avg Diagnostic</span>
-              <BarChart3 className="w-4 h-4 text-cyan-400" />
-            </div>
-            <div className="text-2xl font-bold text-cyan-300 mt-2">
-              {stats.avgSeoScore ? `${stats.avgSeoScore}/100` : '--'}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Schema & Conversion
+              Queued in system
             </div>
           </div>
         </div>
@@ -802,22 +863,11 @@ export default function OutreachDashboard() {
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-[#0d1424] border border-slate-800/90 rounded-2xl p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-3">
             <button
-              onClick={() => {
-                setShowSeoLabModal(true);
-                if (!seoLabUrl) setSeoLabUrl('https://synergytechsol.com');
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white shadow-lg shadow-emerald-600/30 transition active:scale-95 cursor-pointer ring-1 ring-emerald-400/40"
-            >
-              <Gauge className="w-4 h-4 text-emerald-200" />
-              <span>⚡ Instant 4-Pillar SEO & AI Search (GEO) Lab</span>
-            </button>
-
-            <button
               onClick={() => setShowDiscoveryModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white shadow-lg shadow-cyan-600/30 transition active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white shadow-lg shadow-cyan-600/30 transition active:scale-95 cursor-pointer ring-1 ring-cyan-400/40"
             >
               <Sparkles className="w-4 h-4 text-cyan-200" />
-              <span>🚀 Discover Leads</span>
+              <span>🚀 Discover No-Website Leads</span>
             </button>
 
             <button
@@ -844,54 +894,82 @@ export default function OutreachDashboard() {
               <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin text-white' : ''}`} />
               {isProcessing ? `⚡ Pipeline Running (${elapsedSeconds}s)...` : '⚡ Process Next Lead Now'}
             </button>
+
+            <button
+              onClick={handleClearAllData}
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 transition active:scale-95 cursor-pointer"
+              title="Delete all leads and reset queue"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>Clear Old Data</span>
+            </button>
           </div>
 
-          {/* Vercel Cron Status Badge */}
+          {/* Acquisition Strategy Badge */}
           <div className="flex items-center gap-3 text-xs bg-slate-900/90 border border-slate-800 px-3.5 py-2 rounded-xl">
             <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-slate-400 font-mono">
-              Vercel Cron: <strong className="text-slate-200">0 9-15 * * 1-5</strong> (1 email/hour window)
+              Mode: <strong className="text-emerald-300">Zero-Website Direct Acquisition</strong>
             </span>
           </div>
         </div>
 
-        {/* Funnel Architecture Visualizer */}
-        <div className="bg-[#0d1424] border border-slate-800 rounded-2xl p-5">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
-            <Activity className="w-4 h-4 text-blue-400" /> Dual Funnel Automated Routing
-          </h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            
-            {/* Funnel A Card */}
-            <div className="p-4 rounded-xl bg-slate-900/70 border border-blue-500/20 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5" /> FUNNEL A: Website Exists
-                </span>
-                <span className="text-[10px] bg-blue-500/10 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded font-mono">
-                  Speed, Schema & Conversion Audit
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">
-                Runs Google PageSpeed API (Mobile) + Schema.org & Mobile Friction Scanner. Evaluates LCP render delays, LocalBusiness JSON-LD, and 1-tap booking friction to generate an executive PDF diagnostic report. High-scoring sites are marked <strong>SKIPPED</strong>.
-              </p>
-            </div>
-
-            {/* Funnel B Card */}
-            <div className="p-4 rounded-xl bg-slate-900/70 border border-indigo-500/20 space-y-2">
+        {/* Acquisition Strategy & Upsell Roadmap Visualizer */}
+        <div className="bg-[#0d1424] border border-slate-800 rounded-2xl p-5 shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-slate-300 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-emerald-400" /> Zero-Website Acquisition & Agency Upsell Roadmap
+            </h2>
+            <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold">
+              High-Ticket Client Ladder
+            </span>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-4">
+            {/* Step 1 */}
+            <div className="p-4 rounded-xl bg-slate-900/70 border border-indigo-500/30 space-y-2 relative overflow-hidden">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" /> FUNNEL B: No Website Found
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" /> STEP 1: Live Prototype Offer
                 </span>
-                <span className="text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded font-mono">
-                  Live Prototype Offer
+                <span className="text-[10px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded font-mono font-bold">
+                  Foot-In-The-Door
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                Instantly mounts live responsive web prototype at <code className="text-indigo-300">/demo/[slug]</code>. Gemini generates localized pitch hook for Google Maps searchers and dispatches plain-text prototype invitation email.
+              <p className="text-xs text-slate-400 leading-relaxed">
+                We generate a bespoke, ultra-fast mobile prototype at <code className="text-indigo-300">/demo/[slug]</code> featuring their Google reviews, star rating, and 1-tap quote form. Seeing their own live website creates instant buying intent!
               </p>
             </div>
 
+            {/* Step 2 */}
+            <div className="p-4 rounded-xl bg-slate-900/70 border border-emerald-500/30 space-y-2 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <MessageCircle className="w-3.5 h-3.5 text-emerald-400" /> STEP 2: 1-Tap WhatsApp & Call Pitch
+                </span>
+                <span className="text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-mono font-bold">
+                  80%+ Open Rate
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Reach out directly on WhatsApp or direct phone call with their personalized demo link. Zero email spam resistance. Business owners review the site on mobile within minutes.
+              </p>
+            </div>
+
+            {/* Step 3 */}
+            <div className="p-4 rounded-xl bg-slate-900/70 border border-amber-500/30 space-y-2 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" /> STEP 3: High-Ticket Upsell Ladder
+                </span>
+                <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-mono font-bold">
+                  Monthly MRR
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Launch Site ($300-$800) ➔ Monthly Hosting & Care Retainer ($50-$100/mo) ➔ Local SEO & Google Maps Pack Ranking ($300-$600/mo). Recurring revenue unlocked!
+              </p>
+            </div>
           </div>
         </div>
 
@@ -901,10 +979,10 @@ export default function OutreachDashboard() {
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search business name, email, or city..."
+              placeholder="Search business name, phone, email, or city..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[#0d1424] border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
+              className="w-full bg-[#0d1424] border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition"
             />
           </div>
 
@@ -913,24 +991,24 @@ export default function OutreachDashboard() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-[#0d1424] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500 transition"
+              className="bg-[#0d1424] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-cyan-500 transition"
             >
               <option value="ALL">All Statuses</option>
               <option value="PENDING">PENDING (Queue)</option>
-              <option value="SENT">SENT (Dispatched)</option>
-              <option value="SKIPPED">SKIPPED (High Score)</option>
+              <option value="QUALIFIED">QUALIFIED (Demo Live)</option>
+              <option value="SENT">SENT (Outreach Delivered)</option>
               <option value="FAILED">FAILED</option>
             </select>
 
-            {/* Funnel Filter */}
+            {/* Channel Filter */}
             <select
-              value={funnelFilter}
-              onChange={(e) => setFunnelFilter(e.target.value)}
-              className="bg-[#0d1424] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500 transition"
+              value={channelFilter}
+              onChange={(e) => setChannelFilter(e.target.value)}
+              className="bg-[#0d1424] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-cyan-500 transition"
             >
-              <option value="ALL">All Funnels</option>
-              <option value="WITH_WEBSITE">Funnel A (Website Exists)</option>
-              <option value="NO_WEBSITE">Funnel B (No Website)</option>
+              <option value="ALL">All Channels</option>
+              <option value="WITH_PHONE">📱 Has Phone (WhatsApp Ready)</option>
+              <option value="WITH_EMAIL">✉️ Has Email</option>
             </select>
           </div>
         </div>
@@ -941,10 +1019,10 @@ export default function OutreachDashboard() {
             <table className="w-full text-left text-xs text-slate-300">
               <thead className="bg-[#080d18] border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                 <tr>
-                  <th className="px-5 py-3.5">Business & Contact</th>
-                  <th className="px-5 py-3.5">Funnel & Site</th>
-                  <th className="px-5 py-3.5">Status</th>
-                  <th className="px-5 py-3.5">Audit / Demo Metrics</th>
+                  <th className="px-5 py-3.5">Business & Local Reputation</th>
+                  <th className="px-5 py-3.5">Phone & 1-Tap WhatsApp</th>
+                  <th className="px-5 py-3.5">Live Prototype Demo</th>
+                  <th className="px-5 py-3.5">Status & Outreach</th>
                   <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -954,13 +1032,13 @@ export default function OutreachDashboard() {
                     <td colSpan={5} className="px-5 py-12 text-center text-slate-500">
                       {loading ? (
                         <div className="flex items-center justify-center gap-2">
-                          <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
+                          <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
                           <span>Loading leads queue...</span>
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          <p className="text-sm font-medium text-slate-400">No leads match the current filters</p>
-                          <p className="text-xs">Import a CSV file or add leads to initiate automated dispatch.</p>
+                          <p className="text-sm font-medium text-slate-400">No leads in the queue</p>
+                          <p className="text-xs text-slate-500">Click <strong className="text-cyan-300">"Discover No-Website Leads"</strong> above to extract local businesses without websites.</p>
                         </div>
                       )}
                     </td>
@@ -969,6 +1047,8 @@ export default function OutreachDashboard() {
                   filteredLeads.map((lead) => {
                     const audit = (lead.audit_reports && lead.audit_reports[0]) || null;
                     const slug = lead.business_slug || (lead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
+                    const phone = lead.phone || extractPhoneFallback(lead.status_reason);
+                    const waUrl = getWhatsAppUrl(lead);
 
                     return (
                       <tr
@@ -980,119 +1060,106 @@ export default function OutreachDashboard() {
                         }`}
                       >
                         
-                        {/* Business & Contact */}
+                        {/* Business & Local Reputation */}
                         <td className="px-5 py-4">
                           <div className="font-bold text-white text-sm flex items-center gap-2">
                             <span>{lead.business_name}</span>
                             {runningLeadId === lead.id && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 animate-pulse">
                                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
-                                Active Run ({elapsedSeconds}s)
+                                Active ({elapsedSeconds}s)
                               </span>
                             )}
                           </div>
-                          <div className="text-slate-400 text-[11px] flex items-center gap-1.5 mt-0.5 font-mono">
-                            <Mail className="w-3 h-3 text-slate-500" /> {lead.email}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                              <Star className="w-3 h-3 fill-amber-400 text-amber-400" /> {lead.rating || '4.9'} ({lead.review_count || '45'}+ reviews)
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {lead.owner_name} • {lead.city || 'Local Area'} • {lead.category}
+                            </span>
                           </div>
-                          <div className="text-slate-500 text-[11px] mt-0.5">
-                            {lead.owner_name} • {lead.city || 'Area'} • {lead.category}
-                          </div>
-                        </td>
-
-                        {/* Funnel & Site */}
-                        <td className="px-5 py-4">
-                          {lead.has_website && lead.website_url ? (
-                            <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">
-                                <Globe className="w-3 h-3" /> Funnel A (Site)
-                              </span>
-                              <a
-                                href={lead.website_url.startsWith('http') ? lead.website_url : `https://${lead.website_url}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[11px] text-slate-400 hover:text-blue-400 truncate max-w-[180px] block transition flex items-center gap-1"
-                              >
-                                {lead.website_url.replace(/^https?:\/\//, '')} <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded">
-                                <Sparkles className="w-3 h-3" /> Funnel B (Prototype)
-                              </span>
-                              <Link
-                                href={`/demo/${slug}`}
-                                target="_blank"
-                                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-mono flex items-center gap-1"
-                              >
-                                /demo/{slug} <ExternalLink className="w-2.5 h-2.5" />
-                              </Link>
+                          {lead.email && (
+                            <div className="text-slate-500 text-[11px] flex items-center gap-1.5 mt-1 font-mono">
+                              <Mail className="w-3 h-3 text-slate-500" /> {lead.email}
                             </div>
                           )}
                         </td>
 
-                        {/* Status */}
+                        {/* Phone & 1-Tap WhatsApp */}
+                        <td className="px-5 py-4">
+                          {phone ? (
+                            <div className="space-y-1.5">
+                              <div className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1.5">
+                                <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span>{phone}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {waUrl && (
+                                  <a
+                                    href={waUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition shadow-sm"
+                                    title="Open WhatsApp with pre-filled pitch and demo link"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>WhatsApp Pitch</span>
+                                  </a>
+                                )}
+                                <a
+                                  href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                                  title="Direct phone call dialer"
+                                >
+                                  <Phone className="w-3 h-3 text-slate-400" />
+                                  <span>Call</span>
+                                </a>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-500 text-[11px] italic">No phone captured</span>
+                          )}
+                        </td>
+
+                        {/* Live Prototype Demo */}
+                        <td className="px-5 py-4">
+                          <div className="space-y-1">
+                            <div className="inline-flex items-center gap-1 text-[10px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded">
+                              <Sparkles className="w-3 h-3 text-indigo-400" /> Prototype Mounted
+                            </div>
+                            <Link
+                              href={`/demo/${slug}`}
+                              target="_blank"
+                              className="text-xs text-indigo-300 hover:text-indigo-200 font-mono flex items-center gap-1 underline underline-offset-2 transition"
+                            >
+                              /demo/{slug} <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          </div>
+                        </td>
+
+                        {/* Status & Outreach */}
                         <td className="px-5 py-4">
                           <span
                             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
                               lead.status === 'SENT'
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                                : lead.status === 'SKIPPED'
-                                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30'
-                                : lead.status === 'FAILED'
-                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
                                 : lead.status === 'QUALIFIED'
                                 ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
+                                : lead.status === 'FAILED'
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
                                 : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
                             }`}
                           >
                             {lead.status === 'SENT' && <CheckCircle2 className="w-3 h-3" />}
+                            {lead.status === 'QUALIFIED' && <Smartphone className="w-3 h-3" />}
                             {lead.status === 'PENDING' && <Clock className="w-3 h-3" />}
                             {lead.status}
                           </span>
                           {lead.status_reason && (
-                            <p className="text-[10px] text-slate-500 mt-1 max-w-[200px] truncate" title={lead.status_reason}>
+                            <p className="text-[10px] text-slate-400 mt-1 max-w-[220px] line-clamp-2" title={lead.status_reason}>
                               {lead.status_reason}
                             </p>
-                          )}
-                        </td>
-
-                        {/* Audit / Demo Metrics */}
-                        <td className="px-5 py-4">
-                          {audit ? (
-                            <div className="space-y-1">
-                              {audit.speed_score !== undefined && audit.speed_score !== null ? (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] text-slate-400">Speed:</span>
-                                  <span
-                                    className={`font-mono font-bold text-[11px] ${
-                                      audit.speed_score >= 70 ? 'text-emerald-400' : 'text-rose-400'
-                                    }`}
-                                  >
-                                    {audit.speed_score}/100
-                                  </span>
-                                  <span className="text-[10px] text-slate-400">SEO:</span>
-                                  <span
-                                    className={`font-mono font-bold text-[11px] ${
-                                      audit.seo_score >= 75 ? 'text-emerald-400' : 'text-amber-400'
-                                    }`}
-                                  >
-                                    {audit.seo_score}/100
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-[11px] text-indigo-300 font-mono">
-                                  Prototype Generated
-                                </span>
-                              )}
-                              {audit.gemini_hook && (
-                                <p className="text-[10px] text-slate-400 italic line-clamp-1 max-w-[220px]">
-                                  "{audit.gemini_hook}"
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-600 text-[11px]">Awaiting run</span>
                           )}
                         </td>
 
@@ -1103,22 +1170,20 @@ export default function OutreachDashboard() {
                               <button
                                 onClick={() => setSelectedLeadForReport({ lead, audit })}
                                 className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs transition"
-                                title="Inspect Audit Report & Email Copy"
+                                title="Inspect Copy & Generated Assets"
                               >
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
                             )}
 
-                            {!lead.has_website && (
-                              <Link
-                                href={`/demo/${slug}`}
-                                target="_blank"
-                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 rounded text-xs transition flex items-center gap-1"
-                                title="Preview Live Prototype"
-                              >
-                                Demo
-                              </Link>
-                            )}
+                            <Link
+                              href={`/demo/${slug}`}
+                              target="_blank"
+                              className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded text-xs transition flex items-center gap-1 font-medium"
+                              title="Preview Live Prototype"
+                            >
+                              Demo
+                            </Link>
 
                             <button
                               onClick={() => handleProcessNext(lead.id)}
@@ -1128,7 +1193,7 @@ export default function OutreachDashboard() {
                                   ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/60 shadow-lg shadow-cyan-500/20'
                                   : 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30'
                               }`}
-                              title={runningLeadId === lead.id ? 'Live Pipeline Running...' : 'Process this lead immediately'}
+                              title={runningLeadId === lead.id ? 'Pipeline Running...' : 'Generate AI Hooks & Process Lead'}
                             >
                               {runningLeadId === lead.id ? (
                                 <>
@@ -1205,85 +1270,16 @@ export default function OutreachDashboard() {
               )}
 
               <form id="discovery-form" onSubmit={handleDiscoverLeads} className="space-y-4 text-xs">
-                {/* Discovery Mode Selector */}
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
-                    Extraction Engine Mode
-                  </label>
-                  <div className="grid grid-cols-3 gap-2 p-1 bg-slate-950 border border-slate-800 rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => setDiscoveryMode('APOLLO_DECISION_MAKERS')}
-                      className={`py-2 px-2 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1 cursor-pointer ${
-                        discoveryMode === 'APOLLO_DECISION_MAKERS'
-                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <User className="w-3.5 h-3.5" />
-                      <span>🎯 Decision Makers</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDiscoveryMode('GOOGLE_MAPS')}
-                      className={`py-2 px-2 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1 cursor-pointer ${
-                        discoveryMode === 'GOOGLE_MAPS'
-                          ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                      <span>🌐 Google Maps</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDiscoveryMode('SINGLE_DOMAIN')}
-                      className={`py-2 px-2 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1 cursor-pointer ${
-                        discoveryMode === 'SINGLE_DOMAIN'
-                          ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <Search className="w-3.5 h-3.5" />
-                      <span>🔍 Single Domain</span>
-                    </button>
+                {/* Discovery Engine Banner */}
+                <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/40 via-blue-950/30 to-indigo-950/40 border border-cyan-500/30 space-y-1.5 shadow-inner">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold text-xs">
+                    <Globe className="w-4 h-4 text-cyan-400" />
+                    <span>Google Maps No-Website Acquisition Scraper</span>
                   </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Exclusively discovers businesses that <strong>have no website</strong>, extracts their verified direct phone numbers for WhatsApp & calling, and generates a live mobile prototype at <code className="text-cyan-300 font-mono">/demo/[slug]</code>!
+                  </p>
                 </div>
-
-                {discoveryMode === 'SINGLE_DOMAIN' ? (
-                  <div className="space-y-3.5">
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
-                        Target Website / Domain URL *
-                      </label>
-                      <input
-                        type="url"
-                        required
-                        placeholder="https://synergytechsol.com or apexroofing.com"
-                        value={singleDomainUrl}
-                        onChange={(e) => setSingleDomainUrl(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
-                        Company / Business Name (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. SynergyTech Solutions (auto-derived if blank)"
-                        value={singleBusinessName}
-                        onChange={(e) => setSingleBusinessName(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
-                      />
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      ⚡ Autonomously crawls team & about pages, extracts the Founder / CEO name, synthesizes email permutations, and tests MX deliverability.
-                    </p>
-                  </div>
-                ) : (
-                  <>
                     {/* High-Demand US Search Trends & Conversion Hotspots */}
                     <div className="space-y-2 p-3 bg-gradient-to-r from-blue-950/30 via-slate-950 to-indigo-950/30 rounded-xl border border-cyan-500/30">
                       <div className="flex items-center justify-between">
@@ -1375,8 +1371,6 @@ export default function OutreachDashboard() {
                         className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
                       />
                     </div>
-                  </>
-                )}
 
                 {/* Multi-tier features highlight */}
                 <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 space-y-1.5 text-[11px] text-slate-400">
@@ -1551,46 +1545,42 @@ export default function OutreachDashboard() {
                       placeholder="e.g. David Miller"
                       value={newLead.owner_name}
                       onChange={(e) => setNewLead({ ...newLead, owner_name: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 transition text-xs"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-cyan-500 transition text-xs"
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Recipient Email *</label>
+                    <label className="block text-emerald-300 font-semibold mb-1 flex items-center gap-1">
+                      <Phone className="w-3.5 h-3.5 text-emerald-400" /> Phone Number (WhatsApp / Calling) *
+                    </label>
                     <input
-                      type="email"
-                      required
-                      placeholder="contact@business.com"
-                      value={newLead.email}
-                      onChange={(e) => setNewLead({ ...newLead, email: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 transition text-xs"
+                      type="tel"
+                      placeholder="e.g. +1 (555) 234-5678"
+                      value={newLead.phone}
+                      onChange={(e) => setNewLead({ ...newLead, phone: e.target.value })}
+                      className="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-3.5 py-2.5 text-emerald-300 font-mono focus:outline-none focus:border-emerald-400 transition text-xs"
                     />
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-2">
-                  <label className="flex items-center gap-2 text-slate-200 font-semibold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newLead.has_website}
-                      onChange={(e) => setNewLead({ ...newLead, has_website: e.target.checked })}
-                      className="rounded bg-slate-900 border-slate-700 text-blue-600 focus:ring-0 w-4 h-4 cursor-pointer"
-                    />
-                    <span>Has Existing Website (Funnel A: Speed & SEO Audit)</span>
-                  </label>
-                  {newLead.has_website && (
-                    <input
-                      type="url"
-                      placeholder="https://example.com"
-                      value={newLead.website_url}
-                      onChange={(e) => setNewLead({ ...newLead, website_url: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-blue-500 transition text-xs"
-                    />
-                  )}
-                  {!newLead.has_website && (
-                    <p className="text-[11px] text-indigo-400 font-mono">
-                      ⚡ Funnel B Active: Will mount responsive prototype offer at /demo/[slug]
-                    </p>
-                  )}
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Recipient Email (Optional)</label>
+                  <input
+                    type="email"
+                    placeholder="contact@business.com (Optional if phone is provided)"
+                    value={newLead.email}
+                    onChange={(e) => setNewLead({ ...newLead, email: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-cyan-500 transition text-xs"
+                  />
+                </div>
+
+                <div className="p-3 bg-indigo-950/30 border border-indigo-500/30 rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 text-indigo-300 font-bold text-xs">
+                    <Sparkles className="w-4 h-4 text-indigo-400" />
+                    <span>Instant Live Prototype Engine Active</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    A personalized live mobile prototype will be mounted at <code className="text-indigo-300 font-mono">/demo/[slug]</code> for 1-tap WhatsApp and phone pitching!
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

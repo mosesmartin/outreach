@@ -8,15 +8,13 @@ import fs from 'fs';
 import path from 'path';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
-const BACKUP_FILE = path.join(process.cwd(), 'data', 'fallback_leads.json');
-
+const DATA_DIR = path.join(process.cwd(), 'data');
+const BACKUP_FILE = path.join(DATA_DIR, 'fallback_leads.json');
 
 function ensureDataDir() {
-  const dir = path.join(process.cwd(), 'data');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 }
 
@@ -27,6 +25,7 @@ function loadFallbackLeads() {
       const content = fs.readFileSync(BACKUP_FILE, 'utf8');
       return JSON.parse(content || '[]');
     } catch (e) {
+      console.warn('Fallback leads parse warning:', e.message);
       return [];
     }
   }
@@ -42,8 +41,15 @@ function saveFallbackLeads(leads) {
   }
 }
 
+function extractPhoneFallback(reason) {
+  if (!reason || typeof reason !== 'string') return null;
+  const match = reason.match(/(?:Phone:\s*|tel:)([\+\d\s\(\)\-\.]{7,25})/i);
+  return match ? match[1].trim() : null;
+}
+
 /**
- * Normalizes input lead data from CSV, Apify, or Direct JSON
+ * Normalizes input lead data from CSV, Google Places, Apify, or Direct JSON
+ * Focus: No-Website Acquisition Target with Phone & WhatsApp
  */
 function normalizeLeadInput(raw) {
   const businessName = raw.business_name || raw.businessName || raw.title || raw.name || 'Unnamed Business';
@@ -51,18 +57,11 @@ function normalizeLeadInput(raw) {
   const ownerName = cleanPersonName(rawOwner);
   const rawEmail = raw.email || raw.contact_email || raw.mail || '';
   const cleanEmail = extractCleanEmail(rawEmail);
-  const websiteUrl = raw.website_url || raw.website || raw.url || raw.site || null;
-  const hasWebsite = raw.has_website !== undefined 
-    ? Boolean(raw.has_website && raw.has_website !== 'false' && raw.has_website !== '0' && raw.has_website !== false)
-    : (raw.hasWebsite !== undefined ? Boolean(raw.hasWebsite) : Boolean(websiteUrl && websiteUrl.trim().length > 3));
+  const phone = raw.phone || raw.telephone || raw.sanitizedPhone || raw.phoneUnformatted || extractPhoneFallback(raw.status_reason) || null;
   
-  const category = raw.category || raw.industry || raw.type || 'Local Business';
-  const city = raw.city || raw.location || raw.address_city || raw.fullAddress || 'Metro Area';
+  const category = raw.category || raw.industry || raw.type || 'Local Services';
+  const city = raw.city || raw.location || raw.address_city || raw.fullAddress || 'Local Area';
   const businessSlug = generateSlug(businessName);
-  const phone = raw.phone || raw.telephone || raw.sanitizedPhone || null;
-
-  const hasValidEmail = Boolean(cleanEmail);
-  const email = cleanEmail || null;
 
   let services = [];
   if (Array.isArray(raw.services)) {
@@ -71,11 +70,11 @@ function normalizeLeadInput(raw) {
     services = raw.services.split(',').map((s) => s.trim()).filter(Boolean);
   }
 
-  const initialStatus = raw.status || (hasValidEmail ? 'PENDING' : 'SKIPPED');
+  const initialStatus = raw.status || 'PENDING';
   const initialReason = raw.status_reason || (
-    !hasValidEmail 
-      ? `Prototype live at /demo/${businessSlug} • Direct Phone: ${phone || 'N/A'}`
-      : (hasWebsite ? 'Queued for Funnel A Audit' : 'Queued for Funnel B Prototype')
+    phone 
+      ? `No Website • Verified Phone: ${phone} (Live Prototype ready at /demo/${businessSlug})`
+      : `No Website • Prototype ready at /demo/${businessSlug}`
   );
 
   return {
@@ -83,12 +82,13 @@ function normalizeLeadInput(raw) {
     business_name: businessName,
     business_slug: businessSlug,
     owner_name: ownerName,
-    email: email,
-    website_url: hasWebsite && websiteUrl ? websiteUrl.trim() : null,
-    has_website: hasWebsite,
+    email: cleanEmail || null,
+    phone: phone ? String(phone).trim() : null,
+    website_url: null,
+    has_website: false,
     category,
     city,
-    services: services.length > 0 ? services : ['Rapid Response', 'Estimates', 'Certified Work'],
+    services: services.length > 0 ? services : ['Rapid Quotes', 'Verified 5-Star Service', 'Direct Local Booking'],
     rating: parseFloat(raw.rating || raw.stars || '4.9') || 4.9,
     review_count: parseInt(raw.review_count || raw.reviewsCount || raw.reviews || '45', 10) || 45,
     status: initialStatus,
@@ -103,11 +103,17 @@ function normalizeLeadInput(raw) {
 export async function GET(req) {
   const fallbackList = loadFallbackLeads();
 
+  const enrichWithPhone = (lead) => {
+    if (!lead) return lead;
+    const phone = lead.phone || extractPhoneFallback(lead.status_reason) || null;
+    return { ...lead, phone };
+  };
+
   if (!isSupabaseConfigured) {
     return NextResponse.json({
       configured: true,
       message: 'Running in resilient storage mode',
-      leads: fallbackList,
+      leads: fallbackList.map(enrichWithPhone),
     });
   }
 
@@ -133,7 +139,7 @@ export async function GET(req) {
       console.warn('Supabase query error, serving fallback store:', error.message);
       return NextResponse.json({
         configured: true,
-        leads: fallbackList,
+        leads: fallbackList.map(enrichWithPhone),
       });
     }
 
@@ -148,13 +154,13 @@ export async function GET(req) {
 
     return NextResponse.json({
       configured: true,
-      leads: merged,
+      leads: merged.map(enrichWithPhone),
     });
   } catch (err) {
     console.warn('Supabase connection exception, returning fallback list:', err.message);
     return NextResponse.json({
       configured: true,
-      leads: fallbackList,
+      leads: fallbackList.map(enrichWithPhone),
     });
   }
 }
@@ -190,13 +196,11 @@ export async function POST(req) {
 
     const validLeads = rawItems
       .map(normalizeLeadInput)
-      .filter((l) => l.business_name && l.business_name !== 'Unnamed Business' && l.status !== 'SKIPPED');
+      .filter((l) => l.business_name && l.business_name !== 'Unnamed Business');
 
     if (validLeads.length === 0) {
       return NextResponse.json(
-        {
-          error: 'No valid lead records provided in payload.',
-        },
+        { error: 'No valid lead records provided in payload.' },
         { status: 422 }
       );
     }
@@ -207,34 +211,48 @@ export async function POST(req) {
     if (isSupabaseConfigured) {
       try {
         const supabase = getSupabaseAdmin();
+        const recordsToInsert = validLeads.map((l) => {
+          const { id, ...rest } = l;
+          return rest;
+        });
+
         const { data, error } = await supabase
           .from('leads')
-          .insert(validLeads.map((l) => {
-            const { id, ...rest } = l; // let supabase gen uuid if needed
-            return rest;
-          }))
+          .insert(recordsToInsert)
           .select();
 
         if (!error && data) {
           insertedData = data;
-        } else {
-          console.warn('Supabase insert notice (saving to resilient fallback):', error?.message);
+        } else if (error && (error.message?.includes('phone') || error.code === 'PGRST204')) {
+          // Fallback if 'phone' column hasn't refreshed in Supabase schema cache
+          const sanitizedRecords = recordsToInsert.map(r => {
+            const copy = { ...r };
+            delete copy.phone;
+            return copy;
+          });
+          const { data: retryData } = await supabase.from('leads').insert(sanitizedRecords).select();
+          if (retryData) {
+            insertedData = retryData.map((d, i) => ({ ...d, phone: validLeads[i]?.phone }));
+          }
         }
       } catch (dbErr) {
-        console.warn('Supabase connect timeout/error (saving to resilient fallback):', dbErr.message);
+        console.warn('Supabase connect notice (saving to resilient fallback):', dbErr.message);
       }
     }
 
     // Always maintain local persistent fallback store
     const existingFallback = loadFallbackLeads();
-    const existingEmails = new Set(existingFallback.map((l) => l.email));
-    const toAppend = validLeads.filter((l) => !existingEmails.has(l.email));
+    const existingSlugs = new Set(existingFallback.map((l) => l.business_slug));
+    const toAppend = validLeads.filter((l) => !existingSlugs.has(l.business_slug));
     saveFallbackLeads([...toAppend, ...existingFallback]);
 
     return NextResponse.json({
       success: true,
       ingestedCount: insertedData?.length || validLeads.length,
-      leads: insertedData || validLeads,
+      leads: (insertedData || validLeads).map((l, idx) => ({
+        ...l,
+        phone: l.phone || validLeads[idx]?.phone || extractPhoneFallback(l.status_reason),
+      })),
     });
   } catch (err) {
     console.error('API /api/leads error:', err);
@@ -242,5 +260,33 @@ export async function POST(req) {
       { error: err?.message || 'Failed to ingest leads' },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * DELETE /api/leads - Wipes all leads & audit reports for a fresh start
+ */
+export async function DELETE(req) {
+  try {
+    // 1. Clear fallback local JSON
+    saveFallbackLeads([]);
+
+    // 2. Clear Supabase tables
+    if (isSupabaseConfigured) {
+      try {
+        const supabase = getSupabaseAdmin();
+        await supabase.from('audit_reports').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('leads').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      } catch (dbErr) {
+        console.warn('Supabase delete notice:', dbErr.message);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'All old leads and records have been completely cleared.',
+    });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

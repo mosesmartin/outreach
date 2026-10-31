@@ -59,10 +59,21 @@ function getMockLeadFromSlug(slug) {
     services: [],
     rating: 4.9,
     review_count: 64,
+    phone: '+1 (214) 555-0182',
   };
 }
 
 async function getLeadBySlug(slug) {
+  const resolveLead = (l) => {
+    if (!l) return l;
+    let phone = l.phone;
+    if (!phone && l.status_reason) {
+      const match = l.status_reason.match(/(?:Phone:\s*|tel:)([\+\d\s\(\)\-\.]{7,25})/i);
+      if (match) phone = match[1].trim();
+    }
+    return { ...l, phone: phone || '+1 (214) 555-0182' };
+  };
+
   // 1. Try Supabase
   if (isSupabaseConfigured) {
     try {
@@ -73,13 +84,13 @@ async function getLeadBySlug(slug) {
         .eq('business_slug', slug)
         .maybeSingle();
 
-      if (!error && data) return data;
+      if (!error && data) return resolveLead(data);
 
       const { data: list } = await supabase.from('leads').select('*').limit(50);
       const match = list?.find(
         (l) => l.business_slug === slug || (l.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-') === slug
       );
-      if (match) return match;
+      if (match) return resolveLead(match);
     } catch (e) {
       console.warn('Supabase lead fetch notice in demo page:', e.message);
     }
@@ -90,7 +101,7 @@ async function getLeadBySlug(slug) {
   const localMatch = fallbackList.find(
     (l) => l.business_slug === slug || (l.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-') === slug
   );
-  if (localMatch) return localMatch;
+  if (localMatch) return resolveLead(localMatch);
 
   return getMockLeadFromSlug(slug);
 }

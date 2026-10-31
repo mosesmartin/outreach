@@ -1,6 +1,11 @@
 -- ==============================================================================
--- SYNERGYTECH SOLUTIONS: B2B Cold Outreach & Acquisition Engine
+-- SYNERGYTECH SOLUTIONS: B2B Outreach & Acquisition Engine
 -- Database Schema for Supabase (PostgreSQL)
+--
+-- QUICK MIGRATION SCRIPT (Run this in Supabase SQL Editor if upgrading existing DB):
+-- ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+-- ALTER TABLE leads ALTER COLUMN email DROP NOT NULL;
+-- ALTER TABLE leads ALTER COLUMN has_website SET DEFAULT false;
 -- ==============================================================================
 
 -- 1. Create ENUM for status tracking
@@ -21,15 +26,16 @@ CREATE TABLE IF NOT EXISTS admin_users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. Main Leads Table
+-- 3. Main Leads Table (Focused on Businesses Without Websites + Phone & WhatsApp Outreach)
 CREATE TABLE IF NOT EXISTS leads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     business_name VARCHAR(255) NOT NULL,
     business_slug VARCHAR(255),
     owner_name VARCHAR(255) DEFAULT 'Team',
-    email VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    phone VARCHAR(50),
     website_url TEXT,
-    has_website BOOLEAN DEFAULT true,
+    has_website BOOLEAN DEFAULT false,
     category VARCHAR(100),
     city VARCHAR(100),
     services TEXT[] DEFAULT ARRAY[]::TEXT[],

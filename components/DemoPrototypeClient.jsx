@@ -157,6 +157,20 @@ export default function DemoPrototypeClient({ initialLead, initialTheme }) {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {initialLead.phone && (
+              <a
+                href={`tel:${initialLead.phone.replace(/[^0-9+]/g, '')}`}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition ${
+                  isLightMode 
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300' 
+                    : 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border-emerald-500/40'
+                }`}
+              >
+                <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden md:inline">Call Us:</span>
+                <span>{initialLead.phone}</span>
+              </a>
+            )}
             <a
               href="#specialty"
               className={`hidden sm:inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium border transition ${
