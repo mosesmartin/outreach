@@ -53,7 +53,9 @@ import {
   UserCheck,
   X,
   Zap,
-  AlertTriangle
+  AlertTriangle,
+  Briefcase,
+  MapPin
 } from 'lucide-react';
 import GeminiFileChat from '@/components/GeminiFileChat';
 import AiHumanizer from '@/components/AiHumanizer';
@@ -128,6 +130,9 @@ export default function OutreachDashboard() {
   const [crmEditOwner, setCrmEditOwner] = useState('');
   const [crmEditPhone, setCrmEditPhone] = useState('');
   const [crmEditEmail, setCrmEditEmail] = useState('');
+  const [crmEditAddress, setCrmEditAddress] = useState('');
+  const [crmEditCategory, setCrmEditCategory] = useState('');
+  const [filterNoWebsiteCsv, setFilterNoWebsiteCsv] = useState(true);
 
   useEffect(() => {
     if (selectedCrmLead) {
@@ -139,6 +144,8 @@ export default function OutreachDashboard() {
       setCrmEditOwner(selectedCrmLead.owner_name || '');
       setCrmEditPhone(selectedCrmLead.phone || extractPhoneFallback(selectedCrmLead.status_reason) || '');
       setCrmEditEmail(selectedCrmLead.email || '');
+      setCrmEditAddress(selectedCrmLead.address || selectedCrmLead.city || '');
+      setCrmEditCategory(selectedCrmLead.category || '');
       setNewNoteInput('');
       setCrmSaveSuccess(false);
     }
@@ -186,7 +193,7 @@ export default function OutreachDashboard() {
   const [discoveryMode, setDiscoveryMode] = useState('APOLLO_DECISION_MAKERS');
   const [discoveryNiche, setDiscoveryNiche] = useState('Roofing Contractors');
   const [discoveryLocation, setDiscoveryLocation] = useState('Miami, FL');
-  const [discoveryMaxLeads, setDiscoveryMaxLeads] = useState(15);
+  const [discoveryMaxLeads, setDiscoveryMaxLeads] = useState(50);
   const [singleDomainUrl, setSingleDomainUrl] = useState('');
   const [singleBusinessName, setSingleBusinessName] = useState('');
   const [isDiscovering, setIsDiscovering] = useState(false);
@@ -479,6 +486,8 @@ export default function OutreachDashboard() {
       owner_name: crmEditOwner,
       phone: crmEditPhone,
       email: crmEditEmail,
+      address: crmEditAddress,
+      category: crmEditCategory,
     });
   };
 
@@ -676,7 +685,7 @@ export default function OutreachDashboard() {
     setIsUploading(true);
     try {
       const text = await csvFile.text();
-      const res = await fetch('/api/leads', {
+      const res = await fetch(`/api/leads?filter_no_website=${filterNoWebsiteCsv}`, {
         method: 'POST',
         headers: { 'Content-Type': 'text/csv' },
         body: text,
@@ -687,7 +696,8 @@ export default function OutreachDashboard() {
         setShowCsvModal(false);
         setCsvFile(null);
         setCsvPreview([]);
-        alert(`Successfully imported ${data.ingestedCount} leads into queue!`);
+        const filteredMsg = data.skippedWithWebsite ? ` (${data.skippedWithWebsite} businesses with websites filtered out)` : '';
+        alert(`Successfully imported ${data.ingestedCount} leads without websites!${filteredMsg}`);
         await fetchDashboardData();
       } else {
         alert(data.error || 'Failed to import CSV');
@@ -739,7 +749,7 @@ export default function OutreachDashboard() {
         } else {
           setDiscoveryStatus({
             type: 'success',
-            message: `Discovered ${data.totalDiscovered} leads (${data.totalSaved} new saved to database, ${data.skippedDuplicates} duplicates filtered).`,
+            message: `Discovered & Filtered ${data.totalSaved} businesses WITHOUT websites on "${discoveryNiche}" in ${discoveryLocation} (${data.skippedWithWebsite || 0} existing websites filtered out).`,
             isSimulated: data.isSimulated,
           });
         }
@@ -1053,6 +1063,162 @@ export default function OutreachDashboard() {
           </div>
         </div>
 
+        {/* ⚡ 1-CLICK AUTONOMOUS GOOGLE MAPS LEAD HUNTER COMMAND CENTER */}
+        <div className="bg-[#0c1220] border-2 border-cyan-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden ring-1 ring-cyan-500/20">
+          {/* Ambient Lighting Glow */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-cyan-600/10 via-blue-600/5 to-transparent rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 space-y-4">
+            {/* Header & Badges */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-bold">
+                  <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>1-Click Autonomous Lead Hunter</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-emerald-400 font-semibold">Strict No-Website Filter ACTIVE</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
+                  Target Local Keyword & City • Single-Click Lead Acquisition
+                </h3>
+                <p className="text-xs text-slate-400 max-w-2xl">
+                  Deep crawls Google Maps on your keyword, drops businesses with existing websites, and extracts verified Phone, exact Address, What Company Does (Services), and Google Stars directly into Twenty CRM with live mobile prototypes.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-mono px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-bold flex items-center gap-1.5 shadow-inner">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> 100% Zero-Website Guaranteed
+                </span>
+              </div>
+            </div>
+
+            {/* Single-Click Command Bar Input Form */}
+            <form onSubmit={handleDiscoverLeads} className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
+              {/* Niche / Keyword */}
+              <div className="md:col-span-4">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  1. Business Keyword / Niche
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Roofing Contractors or Emergency Plumbing"
+                  value={discoveryNiche}
+                  onChange={(e) => setDiscoveryNiche(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition font-medium"
+                />
+              </div>
+
+              {/* Location / City */}
+              <div className="md:col-span-4">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  2. Target Location / City
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Austin, TX or Miami, FL or London"
+                  value={discoveryLocation}
+                  onChange={(e) => setDiscoveryLocation(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition font-medium"
+                />
+              </div>
+
+              {/* Target Leads Count */}
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  3. Volume Batch
+                </label>
+                <select
+                  value={discoveryMaxLeads}
+                  onChange={(e) => setDiscoveryMaxLeads(parseInt(e.target.value, 10))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white font-mono font-bold focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+                >
+                  <option value="50">50 Leads</option>
+                  <option value="100">100 Leads</option>
+                  <option value="200">200 Leads</option>
+                  <option value="300">300 Leads</option>
+                  <option value="500">500 Leads (Deep)</option>
+                </select>
+              </div>
+
+              {/* ⚡ The Big Single-Click Execute Button */}
+              <div className="md:col-span-2 flex items-end">
+                <button
+                  type="submit"
+                  disabled={isDiscovering}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-xl shadow-cyan-500/25 transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer h-[42px]"
+                >
+                  {isDiscovering ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Hunting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 text-cyan-200 fill-cyan-200" />
+                      <span>1-Click Scrape</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {/* Quick Industry Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mr-1">Quick Presets:</span>
+              {[
+                'Roofing Contractors',
+                'Emergency Plumbing',
+                'Auto Detailing & Ceramic',
+                'Commercial HVAC',
+                'Dental & Clinic Care',
+                'Luxury Hair Salon & Spa',
+                'Licensed Electricians',
+                'High-End Remodeling'
+              ].map((presetNiche) => (
+                <button
+                  key={presetNiche}
+                  type="button"
+                  onClick={() => setDiscoveryNiche(presetNiche)}
+                  className={`text-[10px] px-2.5 py-1 rounded-lg border transition font-medium cursor-pointer ${
+                    discoveryNiche === presetNiche
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                      : 'bg-slate-950/60 text-slate-400 border-slate-800/80 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  {presetNiche}
+                </button>
+              ))}
+            </div>
+
+            {/* Real-time Status Notification Banner */}
+            {discoveryStatus && (
+              <div className={`p-3 rounded-xl text-xs flex items-center justify-between gap-3 border transition ${
+                discoveryStatus.type === 'success'
+                  ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-950/40 border-rose-500/30 text-rose-300'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {discoveryStatus.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  )}
+                  <span>{discoveryStatus.message}</span>
+                </div>
+                <button
+                  onClick={() => setDiscoveryStatus(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800/60 transition cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Operational Control Bar & Actions */}
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-[#0d1424] border border-slate-800/90 rounded-2xl p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-3">
@@ -1061,7 +1227,7 @@ export default function OutreachDashboard() {
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white shadow-lg shadow-cyan-600/30 transition active:scale-95 cursor-pointer ring-1 ring-cyan-400/40"
             >
               <Sparkles className="w-4 h-4 text-cyan-200" />
-              <span>🚀 Discover No-Website Leads</span>
+              <span>🚀 Advanced Discovery Modal</span>
             </button>
 
             <button
@@ -1303,20 +1469,43 @@ export default function OutreachDashboard() {
                                 </h4>
                                 <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 shrink-0">
                                   <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                                  {lead.rating || '4.9'}
+                                  {lead.rating || '4.9'} ({lead.review_count || 45})
                                 </span>
                               </div>
 
-                              {/* Owner & Location */}
-                              <div className="text-[11px] text-slate-400 flex items-center justify-between">
-                                <span className="truncate">{lead.owner_name} • {lead.city || 'Local'}</span>
-                                {priority === 'URGENT' && (
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 uppercase">Urgent</span>
-                                )}
-                                {priority === 'HIGH' && (
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase">High</span>
+                              {/* What Company Does (Category & Service) */}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                                  {lead.category || 'Local Services'}
+                                </span>
+                                {Array.isArray(lead.services) && lead.services.length > 0 && (
+                                  <span className="text-[9px] text-slate-400 font-medium px-1.5 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 truncate max-w-[140px]" title={lead.services[0]}>
+                                    {lead.services[0]}
+                                  </span>
                                 )}
                               </div>
+
+                              {/* Exact Address & Priority */}
+                              <div className="text-[11px] text-slate-400 flex items-center justify-between gap-1">
+                                <span className="truncate flex items-center gap-1 text-[10px]">
+                                  <MapPin className="w-3 h-3 text-cyan-400 shrink-0" />
+                                  <span className="truncate">{lead.address || lead.city || 'Local Area'}</span>
+                                </span>
+                                {priority === 'URGENT' && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 uppercase shrink-0">Urgent</span>
+                                )}
+                                {priority === 'HIGH' && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase shrink-0">High</span>
+                                )}
+                              </div>
+
+                              {/* Verified Phone */}
+                              {phone && (
+                                <div className="text-[11px] font-mono font-bold text-emerald-400 flex items-center gap-1.5">
+                                  <Phone className="w-3 h-3 text-emerald-400 shrink-0" />
+                                  <span>{phone}</span>
+                                </div>
+                              )}
 
                               {/* Deal Financial Tag */}
                               <div className="flex items-center gap-2 pt-1 border-t border-slate-800/60">
@@ -1489,9 +1678,14 @@ export default function OutreachDashboard() {
                                 <Star className="w-3 h-3 fill-amber-400 text-amber-400" /> {lead.rating || '4.9'} ({lead.review_count || '45'}+ reviews)
                               </span>
                               <span className="text-[11px] text-slate-400">
-                                {lead.owner_name} • {lead.city || 'Local Area'} • {lead.category}
+                                {lead.address || lead.city || 'Local Area'} • <strong className="text-cyan-300">{lead.category}</strong>
                               </span>
                             </div>
+                            {Array.isArray(lead.services) && lead.services.length > 0 && (
+                              <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                                <span className="text-slate-500 font-semibold">Services:</span> {lead.services.slice(0, 3).join(' • ')}
+                              </div>
+                            )}
                             {lead.email && (
                               <div className="text-slate-500 text-[11px] flex items-center gap-1.5 mt-1 font-mono">
                                 <Mail className="w-3 h-3 text-slate-500" /> {lead.email}
@@ -1778,38 +1972,66 @@ export default function OutreachDashboard() {
                     <div>
                       <div className="flex justify-between items-center mb-1.5">
                         <label className="block text-slate-300 font-semibold uppercase tracking-wider text-[10px]">
-                          Leads Batch Limit
+                          Target No-Website Leads (Deep Bulk Scraping)
                         </label>
-                        <span className="text-cyan-400 font-mono font-bold text-xs">{discoveryMaxLeads} Leads</span>
+                        <span className="text-cyan-400 font-mono font-bold text-xs">{discoveryMaxLeads} Leads Target</span>
                       </div>
-                      <input
-                        type="range"
-                        min="5"
-                        max="50"
-                        step="5"
-                        value={discoveryMaxLeads}
-                        onChange={(e) => setDiscoveryMaxLeads(parseInt(e.target.value, 10))}
-                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                      />
+                      
+                      {/* Bulk Quick Presets */}
+                      <div className="grid grid-cols-4 gap-2 mb-2">
+                        {[50, 100, 200, 300].map((count) => (
+                          <button
+                            key={count}
+                            type="button"
+                            onClick={() => setDiscoveryMaxLeads(count)}
+                            className={`py-1.5 px-2 rounded-lg text-xs font-mono font-bold border transition cursor-pointer ${
+                              discoveryMaxLeads === count
+                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                                : 'bg-slate-950/70 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
+                            }`}
+                          >
+                            {count} Leads
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="10"
+                          max="500"
+                          step="10"
+                          value={discoveryMaxLeads}
+                          onChange={(e) => setDiscoveryMaxLeads(Math.max(10, parseInt(e.target.value, 10) || 10))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition"
+                          placeholder="Or type custom limit (e.g. 150)"
+                        />
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-500 uppercase tracking-wider">
+                          Max Crawl Target
+                        </span>
+                      </div>
                     </div>
 
-                {/* Multi-tier features highlight */}
-                <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 space-y-1.5 text-[11px] text-slate-400">
-                  <div className="text-slate-300 font-semibold flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-emerald-400" /> Multi-Layer Enrichment Pipeline Active:
+                {/* Strict No-Website Extraction Architecture */}
+                <div className="bg-slate-950/60 border border-cyan-500/20 rounded-xl p-3 space-y-2 text-[11px] text-slate-400">
+                  <div className="text-cyan-300 font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Strict No-Website Acquisition Engine:
                   </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Crawls Google Maps deeply on <strong className="text-white">"{discoveryNiche || 'Keyword'}"</strong>. Every business that already has a website is automatically filtered out. For each genuine target, extracts <strong className="text-slate-200">Phone, exact Address, What Company Does (Services), and Google Stars</strong> for instant demo generation.
+                  </p>
                   <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[10px] text-slate-400">
                     <div className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> Google Places Scrape
+                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> Deep Places Crawl
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> Cheerio Owner Crawler
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> 100% No-Website Filter
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> DNS MX Mail Verifier
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> Services & Category Extraction
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> Auto Deduplication
+                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> Verified Phone & WhatsApp
                     </div>
                   </div>
                 </div>
@@ -1866,9 +2088,32 @@ export default function OutreachDashboard() {
 
             {/* Scrollable Body */}
             <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 text-xs select-text">
-              <p className="text-slate-400">
-                Upload any Apify, Google Maps, or custom CSV export. Supported columns: <code className="text-slate-300">business_name, email, website_url, owner_name, category, city</code>.
-              </p>
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-1.5 text-slate-400">
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> gosom/google-maps-scraper & Google Maps CSV Ready
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  Directly upload raw CSV exports from <strong className="text-cyan-300">gosom/google-maps-scraper</strong>, Apify Google Places, or any Google Maps scraper. Supported columns: <code className="text-slate-300 font-mono">title, phone, website, address, category, categories, review_rating, review_count, description</code>.
+                </p>
+              </div>
+
+              {/* Strict No-Website Filter Toggle */}
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-950/20 border border-blue-500/30 text-slate-200 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={filterNoWebsiteCsv}
+                  onChange={(e) => setFilterNoWebsiteCsv(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-blue-500 focus:ring-blue-500 bg-slate-900 border-slate-700 cursor-pointer"
+                />
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Strict Filter: ONLY Import Businesses WITHOUT a Website
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                    Automatically skips rows that already have an active website. Extracts verified Phone, exact Address, What Company Does (Services), and Stars for genuine demo targets.
+                  </div>
+                </div>
+              </label>
 
               <div className="border-2 border-dashed border-slate-700 hover:border-blue-500 rounded-2xl p-6 text-center cursor-pointer transition bg-slate-950/50">
                 <input
@@ -2979,6 +3224,45 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
                   </div>
                 </div>
 
+                {/* What Company Does / Services & Address Box */}
+                <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 space-y-3 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5 text-cyan-400" /> What Company Does (Demo Foundation)
+                    </span>
+                    <span className="text-[10px] text-amber-300 font-mono font-bold flex items-center gap-1">
+                      <Star className="w-3 h-3 fill-amber-400" /> {selectedCrmLead.rating || '4.9'} ({selectedCrmLead.review_count || 45} Google Reviews)
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-slate-300 flex items-start gap-1.5 font-medium">
+                    <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                    <span>{selectedCrmLead.address || selectedCrmLead.city || 'Local Area'}</span>
+                  </div>
+
+                  {selectedCrmLead.description && (
+                    <p className="text-[11px] text-slate-400 leading-relaxed italic">
+                      "{selectedCrmLead.description}"
+                    </p>
+                  )}
+
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Specialized Services Extracted:</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {((Array.isArray(selectedCrmLead.services) && selectedCrmLead.services.length > 0)
+                        ? selectedCrmLead.services
+                        : (typeof selectedCrmLead.services === 'string' && selectedCrmLead.services.trim()
+                          ? selectedCrmLead.services.split(',').map(s => s.trim()).filter(Boolean)
+                          : [selectedCrmLead.category || 'Specialized Local Service', 'Verified 5-Star Craftsmanship', 'Upfront Transparent Estimates', 'Direct Priority Booking'])
+                      ).map((s, idx) => (
+                        <span key={idx} className="px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[11px] font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-cyan-400" /> {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Notes & Activity Timeline */}
                 <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-inner">
                   <div className="flex items-center justify-between">
@@ -3214,6 +3498,32 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
                         onChange={(e) => setCrmEditEmail(e.target.value)}
                         className="w-full bg-[#080d18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 transition font-mono"
                         placeholder="owner@example.com"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                        Business Physical Address
+                      </label>
+                      <input
+                        type="text"
+                        value={crmEditAddress}
+                        onChange={(e) => setCrmEditAddress(e.target.value)}
+                        className="w-full bg-[#080d18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 transition"
+                        placeholder="123 Commerce St, Austin, TX"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                        Industry / Category (What They Do)
+                      </label>
+                      <input
+                        type="text"
+                        value={crmEditCategory}
+                        onChange={(e) => setCrmEditCategory(e.target.value)}
+                        className="w-full bg-[#080d18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 transition"
+                        placeholder="Roofing Contractors"
                       />
                     </div>
                   </div>

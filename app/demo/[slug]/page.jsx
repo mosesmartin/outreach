@@ -71,7 +71,22 @@ async function getLeadBySlug(slug) {
       const match = l.status_reason.match(/(?:Phone:\s*|tel:)([\+\d\s\(\)\-\.]{7,25})/i);
       if (match) phone = match[1].trim();
     }
-    return { ...l, phone: phone || '+1 (214) 555-0182' };
+
+    let services = [];
+    if (Array.isArray(l.services) && l.services.length > 0) {
+      services = l.services;
+    } else if (typeof l.services === 'string' && l.services.trim()) {
+      services = l.services.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+
+    return { 
+      ...l, 
+      phone: phone || '+1 (214) 555-0182',
+      address: l.address || (l.city ? `${l.city}` : 'Local Service Area'),
+      services,
+      rating: parseFloat(l.rating) || 4.9,
+      review_count: parseInt(l.review_count, 10) || 45,
+    };
   };
 
   // 1. Try Supabase
@@ -86,7 +101,7 @@ async function getLeadBySlug(slug) {
 
       if (!error && data) return resolveLead(data);
 
-      const { data: list } = await supabase.from('leads').select('*').limit(50);
+      const { data: list } = await supabase.from('leads').select('*').limit(300);
       const match = list?.find(
         (l) => l.business_slug === slug || (l.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-') === slug
       );

@@ -151,7 +151,7 @@ export default function DemoPrototypeClient({ initialLead, initialTheme }) {
                 {businessName}
               </h1>
               <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                <MapPin className={`w-3 h-3 shrink-0 ${theme.accentText}`} /> {city} • <span className={theme.accentText}>{category}</span>
+                <MapPin className={`w-3 h-3 shrink-0 ${theme.accentText}`} /> {initialLead.address || city} • <span className={theme.accentText}>{category}</span>
               </p>
             </div>
           </div>
@@ -855,6 +855,9 @@ export default function DemoPrototypeClient({ initialLead, initialTheme }) {
       <footer className="py-8 pb-20 md:pb-8 border-t border-slate-800/80 text-center text-xs text-slate-500">
         <div className="max-w-6xl mx-auto px-4 space-y-2">
           <p>© {new Date().getFullYear()} {businessName} • All rights reserved.</p>
+          <p className="text-[11px] text-slate-400">
+            📍 {initialLead.address || city} {initialLead.phone && `• 📞 ${initialLead.phone}`}
+          </p>
           <p className="text-[11px] text-slate-600">
             Engineered & Custom-Designed as a high-converting prototype by{' '}
             <a href="https://synergytechsol.com" target="_blank" rel="noreferrer" className="text-cyan-500 hover:underline">
@@ -867,7 +870,7 @@ export default function DemoPrototypeClient({ initialLead, initialTheme }) {
       {/* Floating Sticky Mobile Quick Action Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-40 p-3 bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 md:hidden flex items-center gap-2.5 shadow-2xl">
         <a
-          href="tel:5550192834"
+          href={initialLead.phone ? `tel:${initialLead.phone.replace(/[^0-9+]/g, '')}` : 'tel:+12145550182'}
           className="flex-1 py-3 px-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition"
         >
           <Phone className={`w-3.5 h-3.5 ${theme.accentText}`} />

@@ -48,27 +48,59 @@ function extractPhoneFallback(reason) {
 }
 
 /**
- * Normalizes input lead data from CSV, Google Places, Apify, or Direct JSON
- * Focus: No-Website Acquisition Target with Phone & WhatsApp
+ * Normalizes input lead data from CSV (including gosom/google-maps-scraper, Apify, or Google Maps)
+ * Strict Focus: Businesses WITHOUT a website ("woh company kya krti ha", phone, stars, address)
  */
-function normalizeLeadInput(raw) {
+function normalizeLeadInput(raw, filterNoWebsite = true) {
+  const rawWebsite = raw.website || raw.website_url || raw.link || raw.web_site || raw.url || null;
+  const hasWebsite = Boolean(
+    rawWebsite && 
+    String(rawWebsite).trim().length > 4 && 
+    !String(rawWebsite).includes('google.com') && 
+    !String(rawWebsite).includes('facebook.com') &&
+    !String(rawWebsite).includes('instagram.com')
+  );
+
+  if (filterNoWebsite && hasWebsite) {
+    return { __skipped: true, reason: 'HAS_WEBSITE', rawWebsite };
+  }
+
   const businessName = raw.business_name || raw.businessName || raw.title || raw.name || 'Unnamed Business';
   const rawOwner = raw.owner_name || raw.ownerName || raw.owner || raw.contact_name || 'Team';
   const ownerName = cleanPersonName(rawOwner);
-  const rawEmail = raw.email || raw.contact_email || raw.mail || '';
+  const rawEmail = raw.email || raw.emails || raw.contact_email || raw.mail || '';
   const cleanEmail = extractCleanEmail(rawEmail);
-  const phone = raw.phone || raw.telephone || raw.sanitizedPhone || raw.phoneUnformatted || extractPhoneFallback(raw.status_reason) || null;
+  const phone = raw.phone || raw.phone_number || raw.telephone || raw.sanitizedPhone || raw.phoneUnformatted || raw.international_phone_number || extractPhoneFallback(raw.status_reason) || null;
   
-  const category = raw.category || raw.industry || raw.type || 'Local Services';
-  const city = raw.city || raw.location || raw.address_city || raw.fullAddress || 'Local Area';
+  const category = raw.category || raw.categories || raw.industry || raw.type || 'Local Services';
+  const city = raw.city || raw.location || raw.address_city || raw.neighborhood || 'Local Area';
+  const address = raw.address || raw.street || raw.formatted_address || raw.full_address || raw.fullAddress || (city !== 'Local Area' ? city : '');
   const businessSlug = generateSlug(businessName);
 
   let services = [];
   if (Array.isArray(raw.services)) {
     services = raw.services;
+  } else if (Array.isArray(raw.categories)) {
+    services = raw.categories.map((c) => (typeof c === 'string' ? c : c?.name)).filter(Boolean);
   } else if (typeof raw.services === 'string' && raw.services.trim()) {
     services = raw.services.split(',').map((s) => s.trim()).filter(Boolean);
+  } else if (typeof raw.categories === 'string' && raw.categories.trim()) {
+    services = raw.categories.split(',').map((s) => s.trim()).filter(Boolean);
+  } else if (typeof raw.category === 'string' && raw.category.trim()) {
+    services = raw.category.split(',').map((s) => s.trim()).filter(Boolean);
   }
+  if (services.length === 0) {
+    services = [
+      `${category} Diagnostic & Service`,
+      'Upfront Transparent Pricing',
+      'Verified 5-Star Craftsmanship',
+      'Direct Local Priority Booking',
+    ];
+  }
+
+  const rating = parseFloat(raw.rating || raw.review_rating || raw.stars || raw.total_score || '4.9') || 4.9;
+  const reviewCount = parseInt(raw.review_count || raw.reviews_count || raw.reviews || raw.user_ratings_total || '45', 10) || 45;
+  const description = raw.description || raw.about || raw.services_description || `Premier ${category} specialists serving ${city}.`;
 
   const initialStatus = raw.status || 'PENDING';
   const initialReason = raw.status_reason || (
@@ -83,11 +115,18 @@ function normalizeLeadInput(raw) {
     initialStatus === 'SKIPPED' ? 'LOST' :
     'NEW_LEAD'
   );
-  const dealValue = parseFloat(raw.deal_value || raw.dealValue || 0) || 0;
-  const retainerValue = parseFloat(raw.retainer_value || raw.retainerValue || 0) || 0;
+  const dealValue = parseFloat(raw.deal_value || raw.dealValue || 500) || 500;
+  const retainerValue = parseFloat(raw.retainer_value || raw.retainerValue || 75) || 75;
   const priority = raw.priority || 'MEDIUM';
   const followUpDate = raw.follow_up_date || raw.followUpDate || null;
-  const notes = Array.isArray(raw.notes) ? raw.notes : [];
+  const notes = Array.isArray(raw.notes) ? raw.notes : [
+    {
+      id: `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      text: `Imported Lead (No Website). Services: ${services.slice(0, 3).join(', ')}. Live mobile prototype generated at /demo/${businessSlug}.`,
+      createdAt: new Date().toISOString(),
+      author: 'CRM Importer',
+    }
+  ];
 
   return {
     id: raw.id ? (String(raw.id).startsWith('lead-') ? raw.id : `lead-${raw.id}`) : `lead-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -96,13 +135,15 @@ function normalizeLeadInput(raw) {
     owner_name: ownerName,
     email: cleanEmail || null,
     phone: phone ? String(phone).trim() : null,
+    address,
     website_url: null,
     has_website: false,
     category,
     city,
-    services: services.length > 0 ? services : ['Rapid Quotes', 'Verified 5-Star Service', 'Direct Local Booking'],
-    rating: parseFloat(raw.rating || raw.stars || '4.9') || 4.9,
-    review_count: parseInt(raw.review_count || raw.reviewsCount || raw.reviews || '45', 10) || 45,
+    services,
+    description,
+    rating,
+    review_count: reviewCount,
     status: initialStatus,
     status_reason: initialReason,
     stage,
@@ -237,13 +278,31 @@ export async function POST(req) {
       return NextResponse.json({ error: 'No valid lead records provided in payload' }, { status: 400 });
     }
 
-    const validLeads = rawItems
-      .map(normalizeLeadInput)
-      .filter((l) => l.business_name && l.business_name !== 'Unnamed Business');
+    const urlObj = new URL(req.url);
+    const filterNoWebsite = urlObj.searchParams.get('filter_no_website') !== 'false';
+
+    let skippedWithWebsite = 0;
+    const validLeads = [];
+
+    for (const raw of rawItems) {
+      const parsed = normalizeLeadInput(raw, filterNoWebsite);
+      if (parsed.__skipped && parsed.reason === 'HAS_WEBSITE') {
+        skippedWithWebsite++;
+        continue;
+      }
+      if (parsed.business_name && parsed.business_name !== 'Unnamed Business') {
+        validLeads.push(parsed);
+      }
+    }
 
     if (validLeads.length === 0) {
       return NextResponse.json(
-        { error: 'No valid lead records provided in payload.' },
+        { 
+          error: skippedWithWebsite > 0 
+            ? `All ${skippedWithWebsite} businesses in the file already possess active websites. Strict Filter preserved pipeline integrity.`
+            : 'No valid lead records provided in payload.',
+          skippedWithWebsite,
+        },
         { status: 422 }
       );
     }
@@ -272,6 +331,7 @@ export async function POST(req) {
           const sanitizedRecords = recordsToInsert.map(r => {
             const copy = { ...r };
             delete copy.phone;
+            delete copy.address;
             delete copy.stage;
             delete copy.deal_value;
             delete copy.retainer_value;
@@ -285,6 +345,8 @@ export async function POST(req) {
             insertedData = retryData.map((d, i) => ({
               ...d,
               phone: validLeads[i]?.phone,
+              address: validLeads[i]?.address,
+              services: validLeads[i]?.services,
               stage: validLeads[i]?.stage,
               deal_value: validLeads[i]?.deal_value,
               retainer_value: validLeads[i]?.retainer_value,
@@ -308,6 +370,7 @@ export async function POST(req) {
     return NextResponse.json({
       success: true,
       ingestedCount: insertedData?.length || validLeads.length,
+      skippedWithWebsite,
       leads: (insertedData || validLeads).map((l, idx) => ({
         ...l,
         phone: l.phone || validLeads[idx]?.phone || extractPhoneFallback(l.status_reason),
@@ -362,6 +425,14 @@ export async function PATCH(req) {
     if (body.owner_name !== undefined) updates.owner_name = body.owner_name;
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.email !== undefined) updates.email = body.email;
+    if (body.address !== undefined) updates.address = body.address;
+    if (body.category !== undefined) updates.category = body.category;
+    if (body.description !== undefined) updates.description = body.description;
+    if (body.services !== undefined) {
+      updates.services = Array.isArray(body.services) 
+        ? body.services 
+        : String(body.services).split(',').map((s) => s.trim()).filter(Boolean);
+    }
     updates.notes = currentNotes;
     updates.updated_at = new Date().toISOString();
 
