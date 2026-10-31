@@ -4,6 +4,12 @@
 --
 -- QUICK MIGRATION SCRIPT (Run this in Supabase SQL Editor if upgrading existing DB):
 -- ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+-- ALTER TABLE leads ADD COLUMN IF NOT EXISTS stage VARCHAR(50) DEFAULT 'NEW_LEAD';
+-- ALTER TABLE leads ADD COLUMN IF NOT EXISTS deal_value NUMERIC(10,2) DEFAULT 0;
+-- ALTER TABLE leads ADD COLUMN IF NOT EXISTS retainer_value NUMERIC(10,2) DEFAULT 0;
+-- ALTER TABLE leads ADD COLUMN IF NOT EXISTS priority VARCHAR(20) DEFAULT 'MEDIUM';
+-- ALTER TABLE leads ADD COLUMN IF NOT EXISTS notes JSONB DEFAULT '[]'::jsonb;
+-- ALTER TABLE leads ADD COLUMN IF NOT EXISTS follow_up_date TIMESTAMP WITH TIME ZONE;
 -- ALTER TABLE leads ALTER COLUMN email DROP NOT NULL;
 -- ALTER TABLE leads ALTER COLUMN has_website SET DEFAULT false;
 -- ==============================================================================
@@ -26,7 +32,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. Main Leads Table (Focused on Businesses Without Websites + Phone & WhatsApp Outreach)
+-- 3. Main Leads Table (Twenty CRM Architecture: Pipeline Stages, Deal Values, Notes & Retainers)
 CREATE TABLE IF NOT EXISTS leads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     business_name VARCHAR(255) NOT NULL,
@@ -43,6 +49,12 @@ CREATE TABLE IF NOT EXISTS leads (
     review_count INT DEFAULT 45,
     status lead_status DEFAULT 'PENDING',
     status_reason TEXT,
+    stage VARCHAR(50) DEFAULT 'NEW_LEAD',
+    deal_value NUMERIC(10,2) DEFAULT 0,
+    retainer_value NUMERIC(10,2) DEFAULT 0,
+    priority VARCHAR(20) DEFAULT 'MEDIUM',
+    notes JSONB DEFAULT '[]'::jsonb,
+    follow_up_date TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

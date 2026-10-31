@@ -77,6 +77,18 @@ function normalizeLeadInput(raw) {
       : `No Website • Prototype ready at /demo/${businessSlug}`
   );
 
+  const stage = raw.stage || (
+    initialStatus === 'SENT' ? 'CONTACTED' :
+    initialStatus === 'QUALIFIED' ? 'DEMO_READY' :
+    initialStatus === 'SKIPPED' ? 'LOST' :
+    'NEW_LEAD'
+  );
+  const dealValue = parseFloat(raw.deal_value || raw.dealValue || 0) || 0;
+  const retainerValue = parseFloat(raw.retainer_value || raw.retainerValue || 0) || 0;
+  const priority = raw.priority || 'MEDIUM';
+  const followUpDate = raw.follow_up_date || raw.followUpDate || null;
+  const notes = Array.isArray(raw.notes) ? raw.notes : [];
+
   return {
     id: raw.id ? (String(raw.id).startsWith('lead-') ? raw.id : `lead-${raw.id}`) : `lead-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     business_name: businessName,
@@ -93,6 +105,12 @@ function normalizeLeadInput(raw) {
     review_count: parseInt(raw.review_count || raw.reviewsCount || raw.reviews || '45', 10) || 45,
     status: initialStatus,
     status_reason: initialReason,
+    stage,
+    deal_value: dealValue,
+    retainer_value: retainerValue,
+    priority,
+    notes,
+    follow_up_date: followUpDate,
     created_at: raw.created_at || new Date().toISOString(),
   };
 }
@@ -103,17 +121,38 @@ function normalizeLeadInput(raw) {
 export async function GET(req) {
   const fallbackList = loadFallbackLeads();
 
-  const enrichWithPhone = (lead) => {
+  const enrichWithCrmFields = (lead) => {
     if (!lead) return lead;
     const phone = lead.phone || extractPhoneFallback(lead.status_reason) || null;
-    return { ...lead, phone };
+    const stage = lead.stage || (
+      lead.status === 'SENT' ? 'CONTACTED' :
+      lead.status === 'QUALIFIED' ? 'DEMO_READY' :
+      lead.status === 'SKIPPED' ? 'LOST' :
+      'NEW_LEAD'
+    );
+    const dealValue = parseFloat(lead.deal_value || 0) || 0;
+    const retainerValue = parseFloat(lead.retainer_value || 0) || 0;
+    const priority = lead.priority || 'MEDIUM';
+    const notes = Array.isArray(lead.notes) ? lead.notes : [];
+    const followUpDate = lead.follow_up_date || null;
+
+    return {
+      ...lead,
+      phone,
+      stage,
+      deal_value: dealValue,
+      retainer_value: retainerValue,
+      priority,
+      notes,
+      follow_up_date: followUpDate,
+    };
   };
 
   if (!isSupabaseConfigured) {
     return NextResponse.json({
       configured: true,
       message: 'Running in resilient storage mode',
-      leads: fallbackList.map(enrichWithPhone),
+      leads: fallbackList.map(enrichWithCrmFields),
     });
   }
 
@@ -121,6 +160,7 @@ export async function GET(req) {
     const supabase = getSupabaseAdmin();
     const { searchParams } = new URL(req.url);
     const statusFilter = searchParams.get('status');
+    const stageFilter = searchParams.get('stage');
     const limit = parseInt(searchParams.get('limit') || '100', 10);
 
     let query = supabase
@@ -132,6 +172,9 @@ export async function GET(req) {
     if (statusFilter && statusFilter !== 'ALL') {
       query = query.eq('status', statusFilter);
     }
+    if (stageFilter && stageFilter !== 'ALL') {
+      query = query.eq('stage', stageFilter);
+    }
 
     const { data, error } = await query;
 
@@ -139,7 +182,7 @@ export async function GET(req) {
       console.warn('Supabase query error, serving fallback store:', error.message);
       return NextResponse.json({
         configured: true,
-        leads: fallbackList.map(enrichWithPhone),
+        leads: fallbackList.map(enrichWithCrmFields),
       });
     }
 
@@ -154,13 +197,13 @@ export async function GET(req) {
 
     return NextResponse.json({
       configured: true,
-      leads: merged.map(enrichWithPhone),
+      leads: merged.map(enrichWithCrmFields),
     });
   } catch (err) {
     console.warn('Supabase connection exception, returning fallback list:', err.message);
     return NextResponse.json({
       configured: true,
-      leads: fallbackList.map(enrichWithPhone),
+      leads: fallbackList.map(enrichWithCrmFields),
     });
   }
 }
@@ -223,16 +266,32 @@ export async function POST(req) {
 
         if (!error && data) {
           insertedData = data;
-        } else if (error && (error.message?.includes('phone') || error.code === 'PGRST204')) {
-          // Fallback if 'phone' column hasn't refreshed in Supabase schema cache
+        } else if (error) {
+          // Fallback if some new columns haven't refreshed in Supabase schema cache
+          console.warn('Supabase insert notice, attempting schema-safe insert:', error.message);
           const sanitizedRecords = recordsToInsert.map(r => {
             const copy = { ...r };
             delete copy.phone;
+            delete copy.stage;
+            delete copy.deal_value;
+            delete copy.retainer_value;
+            delete copy.priority;
+            delete copy.notes;
+            delete copy.follow_up_date;
             return copy;
           });
           const { data: retryData } = await supabase.from('leads').insert(sanitizedRecords).select();
           if (retryData) {
-            insertedData = retryData.map((d, i) => ({ ...d, phone: validLeads[i]?.phone }));
+            insertedData = retryData.map((d, i) => ({
+              ...d,
+              phone: validLeads[i]?.phone,
+              stage: validLeads[i]?.stage,
+              deal_value: validLeads[i]?.deal_value,
+              retainer_value: validLeads[i]?.retainer_value,
+              priority: validLeads[i]?.priority,
+              notes: validLeads[i]?.notes,
+              follow_up_date: validLeads[i]?.follow_up_date,
+            }));
           }
         }
       } catch (dbErr) {
@@ -260,6 +319,108 @@ export async function POST(req) {
       { error: err?.message || 'Failed to ingest leads' },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * PATCH /api/leads - Twenty CRM Update Engine (Stage, Deal Value, Notes, Priority, Follow-Up)
+ */
+export async function PATCH(req) {
+  try {
+    const body = await req.json();
+    const leadId = body.id;
+    if (!leadId) {
+      return NextResponse.json({ error: 'Lead ID is required for update' }, { status: 400 });
+    }
+
+    let fallbackList = loadFallbackLeads();
+    let targetIndex = fallbackList.findIndex((l) => l.id === leadId || l.business_slug === leadId);
+    let targetLead = targetIndex !== -1 ? fallbackList[targetIndex] : null;
+
+    // Handle new note addition
+    let currentNotes = targetLead?.notes || (Array.isArray(body.notes) ? body.notes : []);
+    if (body.new_note && typeof body.new_note === 'string' && body.new_note.trim()) {
+      const newNoteObj = {
+        id: `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        text: body.new_note.trim(),
+        createdAt: new Date().toISOString(),
+        author: body.author || 'Moses Martin',
+      };
+      currentNotes = [newNoteObj, ...currentNotes];
+    } else if (Array.isArray(body.notes)) {
+      currentNotes = body.notes;
+    }
+
+    // Prepare update payload
+    const updates = {};
+    if (body.stage !== undefined) updates.stage = body.stage;
+    if (body.status !== undefined) updates.status = body.status;
+    if (body.deal_value !== undefined) updates.deal_value = parseFloat(body.deal_value) || 0;
+    if (body.retainer_value !== undefined) updates.retainer_value = parseFloat(body.retainer_value) || 0;
+    if (body.priority !== undefined) updates.priority = body.priority;
+    if (body.follow_up_date !== undefined) updates.follow_up_date = body.follow_up_date;
+    if (body.owner_name !== undefined) updates.owner_name = body.owner_name;
+    if (body.phone !== undefined) updates.phone = body.phone;
+    if (body.email !== undefined) updates.email = body.email;
+    updates.notes = currentNotes;
+    updates.updated_at = new Date().toISOString();
+
+    // Synchronize legacy status with CRM stage if needed
+    if (updates.stage && !updates.status) {
+      if (updates.stage === 'CONTACTED') updates.status = 'SENT';
+      else if (updates.stage === 'DEMO_READY') updates.status = 'QUALIFIED';
+      else if (updates.stage === 'LOST') updates.status = 'SKIPPED';
+      else if (updates.stage === 'NEW_LEAD') updates.status = 'PENDING';
+    }
+
+    let updatedRecord = null;
+
+    if (isSupabaseConfigured) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase
+          .from('leads')
+          .update(updates)
+          .eq('id', leadId)
+          .select()
+          .single();
+
+        if (!error && data) {
+          updatedRecord = data;
+        } else if (error) {
+          console.warn('Supabase update notice (schema-safe retry):', error.message);
+          // Retry updating standard fields only
+          const baseUpdates = {};
+          if (updates.status) baseUpdates.status = updates.status;
+          if (updates.owner_name) baseUpdates.owner_name = updates.owner_name;
+          if (updates.updated_at) baseUpdates.updated_at = updates.updated_at;
+          await supabase.from('leads').update(baseUpdates).eq('id', leadId);
+        }
+      } catch (dbErr) {
+        console.warn('Supabase PATCH exception:', dbErr.message);
+      }
+    }
+
+    // Persist in local resilient storage
+    if (targetLead) {
+      Object.assign(targetLead, updates);
+      fallbackList[targetIndex] = targetLead;
+      saveFallbackLeads(fallbackList);
+      updatedRecord = updatedRecord ? { ...targetLead, ...updatedRecord } : targetLead;
+    } else {
+      const synthetic = { id: leadId, ...updates };
+      fallbackList.unshift(synthetic);
+      saveFallbackLeads(fallbackList);
+      updatedRecord = updatedRecord || synthetic;
+    }
+
+    return NextResponse.json({
+      success: true,
+      lead: updatedRecord,
+    });
+  } catch (err) {
+    console.error('PATCH /api/leads error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 

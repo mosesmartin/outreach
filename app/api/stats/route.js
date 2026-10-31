@@ -50,6 +50,50 @@ export async function GET() {
 
   const withPhoneCount = leads.filter((l) => Boolean(extractPhone(l))).length;
 
+  const getLeadStage = (l) => {
+    if (l.stage) return l.stage;
+    if (l.status === 'SENT') return 'CONTACTED';
+    if (l.status === 'QUALIFIED') return 'DEMO_READY';
+    if (l.status === 'SKIPPED') return 'LOST';
+    return 'NEW_LEAD';
+  };
+
+  const stageCounts = {
+    NEW_LEAD: 0,
+    DEMO_READY: 0,
+    CONTACTED: 0,
+    IN_NEGOTIATION: 0,
+    CLOSED_WON: 0,
+    RETAINER_ACTIVE: 0,
+    LOST: 0,
+  };
+
+  let pipelineValue = 0;
+  let closedWonValue = 0;
+  let mrrValue = 0;
+
+  leads.forEach((l) => {
+    const stage = getLeadStage(l);
+    if (stageCounts[stage] !== undefined) {
+      stageCounts[stage]++;
+    } else {
+      stageCounts.NEW_LEAD++;
+    }
+
+    const val = parseFloat(l.deal_value || 0) || 0;
+    const retVal = parseFloat(l.retainer_value || 0) || 0;
+
+    if (['NEW_LEAD', 'DEMO_READY', 'CONTACTED', 'IN_NEGOTIATION'].includes(stage)) {
+      pipelineValue += val;
+    } else if (stage === 'CLOSED_WON') {
+      closedWonValue += val;
+    }
+
+    if (stage === 'RETAINER_ACTIVE' || retVal > 0) {
+      mrrValue += retVal;
+    }
+  });
+
   const stats = {
     configured: true,
     totalLeads: leads.length,
@@ -61,6 +105,11 @@ export async function GET() {
     withPhone: withPhoneCount,
     noWebsite: leads.filter((l) => !l.has_website).length,
     prototypesReady: leads.length,
+    // Twenty CRM Financial Metrics
+    pipelineValue,
+    closedWonValue,
+    mrrValue,
+    stageCounts,
   };
 
   return NextResponse.json(stats);

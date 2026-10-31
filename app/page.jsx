@@ -7,43 +7,75 @@ import Papa from 'papaparse';
 import {
   Activity,
   ArrowRight,
+  ArrowUpRight,
   BarChart3,
   Bot,
+  Calendar,
   Check,
+  CheckCircle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Code,
   Database,
+  DollarSign,
+  Edit3,
   ExternalLink,
   Eye,
   FileSpreadsheet,
-  Globe,
+  FileText,
   Gauge,
+  Globe,
+  Kanban,
   Layers,
+  LayoutList,
+  LogOut,
   Mail,
+  MessageCircle,
+  MessageSquare,
+  Phone,
   Play,
   Plus,
   RefreshCw,
   Search,
   Send,
-  Sparkles,
-  UploadCloud,
-  UserCheck,
-  X,
-  AlertTriangle,
-  LogOut,
   Shield,
   ShieldCheck,
-  User,
-  Zap,
-  Phone,
-  MessageCircle,
+  SlidersHorizontal,
+  Smartphone,
+  Sparkles,
+  Star,
+  Tag,
   Trash2,
-  Smartphone
+  UploadCloud,
+  User,
+  UserCheck,
+  X,
+  Zap,
+  AlertTriangle
 } from 'lucide-react';
 import GeminiFileChat from '@/components/GeminiFileChat';
 import AiHumanizer from '@/components/AiHumanizer';
 import { TRENDING_OPPORTUNITIES } from '@/lib/trends';
+
+const CRM_STAGES = [
+  { id: 'NEW_LEAD', label: 'New Leads', icon: Layers, badgeColor: 'text-cyan-300 bg-cyan-950/40 border-cyan-500/30', colColor: 'border-cyan-500/30', headerBg: 'bg-cyan-950/30', dot: 'bg-cyan-400' },
+  { id: 'DEMO_READY', label: 'Demo Ready', icon: Sparkles, badgeColor: 'text-indigo-300 bg-indigo-950/40 border-indigo-500/30', colColor: 'border-indigo-500/30', headerBg: 'bg-indigo-950/30', dot: 'bg-indigo-400' },
+  { id: 'CONTACTED', label: 'Contacted', icon: Send, badgeColor: 'text-blue-300 bg-blue-950/40 border-blue-500/30', colColor: 'border-blue-500/30', headerBg: 'bg-blue-950/30', dot: 'bg-blue-400' },
+  { id: 'IN_NEGOTIATION', label: 'In Discussion', icon: MessageSquare, badgeColor: 'text-purple-300 bg-purple-950/40 border-purple-500/30', colColor: 'border-purple-500/30', headerBg: 'bg-purple-950/30', dot: 'bg-purple-400' },
+  { id: 'CLOSED_WON', label: 'Deal Won ($)', icon: CheckCircle2, badgeColor: 'text-emerald-300 bg-emerald-950/40 border-emerald-500/30', colColor: 'border-emerald-500/30', headerBg: 'bg-emerald-950/30', dot: 'bg-emerald-400' },
+  { id: 'RETAINER_ACTIVE', label: 'Monthly Retainer', icon: Zap, badgeColor: 'text-amber-300 bg-amber-950/40 border-amber-500/30', colColor: 'border-amber-500/30', headerBg: 'bg-amber-950/30', dot: 'bg-amber-400' },
+  { id: 'LOST', label: 'Lost / Closed', icon: X, badgeColor: 'text-slate-400 bg-slate-900/40 border-slate-700', colColor: 'border-slate-800', headerBg: 'bg-slate-900/40', dot: 'bg-slate-500' },
+];
+
+const getLeadStage = (lead) => {
+  if (lead?.stage) return lead.stage;
+  if (lead?.status === 'SENT') return 'CONTACTED';
+  if (lead?.status === 'QUALIFIED') return 'DEMO_READY';
+  if (lead?.status === 'SKIPPED') return 'LOST';
+  return 'NEW_LEAD';
+};
 
 export default function OutreachDashboard() {
   const router = useRouter();
@@ -57,16 +89,60 @@ export default function OutreachDashboard() {
     sent: 0,
     skipped: 0,
     failed: 0,
+    withPhone: 0,
     withWebsite: 0,
     noWebsite: 0,
-    avgSpeedScore: 0,
-    avgSeoScore: 0,
+    prototypesReady: 0,
+    pipelineValue: 0,
+    closedWonValue: 0,
+    mrrValue: 0,
+    stageCounts: {
+      NEW_LEAD: 0,
+      DEMO_READY: 0,
+      CONTACTED: 0,
+      IN_NEGOTIATION: 0,
+      CLOSED_WON: 0,
+      RETAINER_ACTIVE: 0,
+      LOST: 0,
+    },
   });
 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [channelFilter, setChannelFilter] = useState('ALL');
+
+  // Twenty CRM Pipeline State
+  const [crmViewMode, setCrmViewMode] = useState('KANBAN'); // 'KANBAN' | 'TABLE'
+  const [selectedCrmLead, setSelectedCrmLead] = useState(null);
+  const [newNoteInput, setNewNoteInput] = useState('');
+  const [isSavingCrm, setIsSavingCrm] = useState(false);
+  const [crmSaveSuccess, setCrmSaveSuccess] = useState(false);
+
+  // CRM Lead Drawer Local Edit Fields
+  const [crmEditStage, setCrmEditStage] = useState('NEW_LEAD');
+  const [crmEditDealValue, setCrmEditDealValue] = useState(0);
+  const [crmEditRetainerValue, setCrmEditRetainerValue] = useState(0);
+  const [crmEditPriority, setCrmEditPriority] = useState('MEDIUM');
+  const [crmEditFollowUp, setCrmEditFollowUp] = useState('');
+  const [crmEditOwner, setCrmEditOwner] = useState('');
+  const [crmEditPhone, setCrmEditPhone] = useState('');
+  const [crmEditEmail, setCrmEditEmail] = useState('');
+
+  useEffect(() => {
+    if (selectedCrmLead) {
+      setCrmEditStage(getLeadStage(selectedCrmLead));
+      setCrmEditDealValue(selectedCrmLead.deal_value || 0);
+      setCrmEditRetainerValue(selectedCrmLead.retainer_value || 0);
+      setCrmEditPriority(selectedCrmLead.priority || 'MEDIUM');
+      setCrmEditFollowUp(selectedCrmLead.follow_up_date ? String(selectedCrmLead.follow_up_date).substring(0, 10) : '');
+      setCrmEditOwner(selectedCrmLead.owner_name || '');
+      setCrmEditPhone(selectedCrmLead.phone || extractPhoneFallback(selectedCrmLead.status_reason) || '');
+      setCrmEditEmail(selectedCrmLead.email || '');
+      setNewNoteInput('');
+      setCrmSaveSuccess(false);
+    }
+  }, [selectedCrmLead]);
 
   const extractPhoneFallback = (reason) => {
     if (!reason || typeof reason !== 'string') return null;
@@ -298,6 +374,112 @@ export default function OutreachDashboard() {
       setLoading(false);
       await fetchDashboardData();
     }
+  };
+
+  const handleUpdateLeadStage = async (leadId, newStage) => {
+    // Optimistic local UI update
+    setLeads((prev) =>
+      prev.map((l) => (l.id === leadId ? { ...l, stage: newStage } : l))
+    );
+    if (selectedCrmLead && selectedCrmLead.id === leadId) {
+      setSelectedCrmLead((prev) => ({ ...prev, stage: newStage }));
+    }
+
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: leadId, stage: newStage }),
+      });
+      if (res.ok) {
+        fetchDashboardData();
+      }
+    } catch (e) {
+      console.error('Failed to update stage:', e);
+    }
+  };
+
+  const handleQuickMoveStage = async (lead, direction, e) => {
+    if (e) e.stopPropagation();
+    const currentStage = getLeadStage(lead);
+    const currentIndex = CRM_STAGES.findIndex((s) => s.id === currentStage);
+    const nextIndex = currentIndex + direction;
+    if (nextIndex >= 0 && nextIndex < CRM_STAGES.length) {
+      await handleUpdateLeadStage(lead.id, CRM_STAGES[nextIndex].id);
+    }
+  };
+
+  const handleSaveCrmLead = async (updatedFields) => {
+    if (!selectedCrmLead) return;
+    setIsSavingCrm(true);
+    setCrmSaveSuccess(false);
+
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedCrmLead.id, ...updatedFields }),
+      });
+      const data = await res.json();
+      if (res.ok && data.lead) {
+        setSelectedCrmLead(data.lead);
+        setLeads((prev) =>
+          prev.map((l) => (l.id === data.lead.id ? { ...l, ...data.lead } : l))
+        );
+        setCrmSaveSuccess(true);
+        setTimeout(() => setCrmSaveSuccess(false), 2500);
+        fetchDashboardData();
+      } else {
+        alert(data.error || 'Failed to update lead');
+      }
+    } catch (e) {
+      alert(`Save error: ${e.message}`);
+    } finally {
+      setIsSavingCrm(false);
+    }
+  };
+
+  const handleAddNote = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedCrmLead || !newNoteInput.trim()) return;
+
+    const noteText = newNoteInput.trim();
+    setNewNoteInput('');
+
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedCrmLead.id,
+          new_note: noteText,
+          author: currentUser?.name || 'Moses Martin',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.lead) {
+        setSelectedCrmLead(data.lead);
+        setLeads((prev) =>
+          prev.map((l) => (l.id === data.lead.id ? { ...l, ...data.lead } : l))
+        );
+      }
+    } catch (e) {
+      console.error('Failed to add note:', e);
+    }
+  };
+
+  const handleSaveCrmDrawer = async () => {
+    if (!selectedCrmLead) return;
+    await handleSaveCrmLead({
+      stage: crmEditStage,
+      deal_value: parseFloat(crmEditDealValue) || 0,
+      retainer_value: parseFloat(crmEditRetainerValue) || 0,
+      priority: crmEditPriority,
+      follow_up_date: crmEditFollowUp ? new Date(crmEditFollowUp).toISOString() : null,
+      owner_name: crmEditOwner,
+      phone: crmEditPhone,
+      email: crmEditEmail,
+    });
   };
 
   const handleProcessNext = async (specificLeadId) => {
@@ -581,13 +763,18 @@ export default function OutreachDashboard() {
   // Filtered Leads
   const filteredLeads = leads.filter((lead) => {
     const phone = lead.phone || extractPhoneFallback(lead.status_reason) || '';
+    const leadStage = getLeadStage(lead);
     const matchesSearch =
       (lead.business_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (lead.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (lead.city && lead.city.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesStatus = statusFilter === 'ALL' || lead.status === statusFilter;
+    const matchesStatus =
+      statusFilter === 'ALL' ||
+      lead.status === statusFilter ||
+      leadStage === statusFilter;
+
     const matchesChannel =
       channelFilter === 'ALL' ||
       (channelFilter === 'WITH_PHONE' && Boolean(phone)) ||
@@ -778,34 +965,80 @@ export default function OutreachDashboard() {
           </div>
         )}
 
-        {/* Metric Cards Grid */}
+        {/* Twenty CRM Pipeline Financial & Outreach Metric Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {/* Card 1: Pipeline Value */}
+          <div className="bg-[#0f172a]/90 border border-cyan-500/30 rounded-xl p-4 shadow-sm bg-gradient-to-b from-cyan-950/20 to-transparent">
+            <div className="flex items-center justify-between text-cyan-400 text-xs font-medium">
+              <span>Pipeline Value</span>
+              <DollarSign className="w-4 h-4 text-cyan-400" />
+            </div>
+            <div className="text-2xl font-bold text-cyan-300 mt-2 font-mono">
+              ${(stats.pipelineValue || 0).toLocaleString()}
+            </div>
+            <div className="text-[11px] text-cyan-500/80 mt-1 font-medium">
+              Active Negotiating Deals
+            </div>
+          </div>
+
+          {/* Card 2: Closed Deals Won */}
+          <div className="bg-[#0f172a]/90 border border-emerald-500/30 rounded-xl p-4 shadow-sm bg-gradient-to-b from-emerald-950/20 to-transparent">
+            <div className="flex items-center justify-between text-emerald-400 text-xs font-medium">
+              <span>Closed Won</span>
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="text-2xl font-bold text-emerald-300 mt-2 font-mono">
+              ${(stats.closedWonValue || 0).toLocaleString()}
+            </div>
+            <div className="text-[11px] text-emerald-500/80 mt-1 font-medium">
+              Website Deals Closed
+            </div>
+          </div>
+
+          {/* Card 3: Monthly Retainer MRR */}
+          <div className="bg-[#0f172a]/90 border border-amber-500/30 rounded-xl p-4 shadow-sm bg-gradient-to-b from-amber-950/20 to-transparent">
+            <div className="flex items-center justify-between text-amber-400 text-xs font-medium">
+              <span>Monthly Retainer</span>
+              <Zap className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="text-2xl font-bold text-amber-300 mt-2 font-mono">
+              ${(stats.mrrValue || 0).toLocaleString()}
+              <span className="text-xs font-normal text-amber-400/80">/mo</span>
+            </div>
+            <div className="text-[11px] text-amber-500/80 mt-1 font-medium">
+              Recurring Care & SEO
+            </div>
+          </div>
+
+          {/* Card 4: No-Website Leads */}
           <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
             <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-              <span>No-Website Leads</span>
-              <Layers className="w-4 h-4 text-cyan-400" />
+              <span>Target Pool</span>
+              <Layers className="w-4 h-4 text-blue-400" />
             </div>
             <div className="text-2xl font-bold text-white mt-2">
               {stats.totalLeads || leads.length}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              Prime Acquisition Targets
+              Zero-Website Businesses
             </div>
           </div>
 
-          <div className="bg-[#0f172a]/90 border border-emerald-500/20 rounded-xl p-4 shadow-sm bg-gradient-to-b from-emerald-950/20 to-transparent">
+          {/* Card 5: Verified WhatsApp & Phone */}
+          <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
             <div className="flex items-center justify-between text-emerald-400 text-xs font-medium">
-              <span>Verified Phone/WA</span>
+              <span>Verified WhatsApp</span>
               <Phone className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-2xl font-bold text-emerald-300 mt-2">
               {stats.withPhone || leads.filter(l => Boolean(l.phone || extractPhoneFallback(l.status_reason))).length}
             </div>
             <div className="text-[11px] text-emerald-500/80 mt-1 font-medium">
-              1-Tap WhatsApp & Call Ready
+              1-Tap Pitch Ready
             </div>
           </div>
 
+          {/* Card 6: Live Prototypes */}
           <div className="bg-[#0f172a]/90 border border-indigo-500/20 rounded-xl p-4 shadow-sm">
             <div className="flex items-center justify-between text-indigo-400 text-xs font-medium">
               <span>Live Prototypes</span>
@@ -816,45 +1049,6 @@ export default function OutreachDashboard() {
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
               Mounted at /demo/[slug]
-            </div>
-          </div>
-
-          <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between text-purple-400 text-xs font-medium">
-              <span>Qualified Queue</span>
-              <Smartphone className="w-4 h-4 text-purple-400" />
-            </div>
-            <div className="text-2xl font-bold text-purple-300 mt-2">
-              {stats.qualified || leads.filter(l => l.status === 'QUALIFIED').length}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Ready for Direct Outreach
-            </div>
-          </div>
-
-          <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between text-emerald-400 text-xs font-medium">
-              <span>Dispatched Emails</span>
-              <Send className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="text-2xl font-bold text-emerald-300 mt-2">
-              {stats.sent || 0}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Cold offers delivered
-            </div>
-          </div>
-
-          <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between text-amber-400 text-xs font-medium">
-              <span>Pending</span>
-              <Clock className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="text-2xl font-bold text-amber-300 mt-2">
-              {stats.pending || 0}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Queued in system
             </div>
           </div>
         </div>
@@ -973,7 +1167,7 @@ export default function OutreachDashboard() {
           </div>
         </div>
 
-        {/* Search & Filter Bar */}
+        {/* Search, Filter & Twenty CRM View Mode Switcher */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -987,17 +1181,20 @@ export default function OutreachDashboard() {
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-            {/* Status Filter */}
+            {/* Stage / Status Filter */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="bg-[#0d1424] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-cyan-500 transition"
             >
-              <option value="ALL">All Statuses</option>
-              <option value="PENDING">PENDING (Queue)</option>
-              <option value="QUALIFIED">QUALIFIED (Demo Live)</option>
-              <option value="SENT">SENT (Outreach Delivered)</option>
-              <option value="FAILED">FAILED</option>
+              <option value="ALL">All Stages & Statuses</option>
+              <option value="NEW_LEAD">📥 New Leads</option>
+              <option value="DEMO_READY">📱 Demo Ready</option>
+              <option value="CONTACTED">💬 Contacted</option>
+              <option value="IN_NEGOTIATION">🤝 In Discussion</option>
+              <option value="CLOSED_WON">🏆 Deal Won</option>
+              <option value="RETAINER_ACTIVE">💎 Monthly Retainer</option>
+              <option value="LOST">❌ Lost</option>
             </select>
 
             {/* Channel Filter */}
@@ -1010,214 +1207,438 @@ export default function OutreachDashboard() {
               <option value="WITH_PHONE">📱 Has Phone (WhatsApp Ready)</option>
               <option value="WITH_EMAIL">✉️ Has Email</option>
             </select>
+
+            {/* Twenty CRM View Mode Toggle */}
+            <div className="flex items-center bg-[#080d18] border border-slate-800 p-1 rounded-xl shrink-0">
+              <button
+                onClick={() => setCrmViewMode('KANBAN')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  crmViewMode === 'KANBAN'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Visual Kanban Pipeline Board"
+              >
+                <Kanban className="w-3.5 h-3.5" />
+                <span>Pipeline Board</span>
+              </button>
+              <button
+                onClick={() => setCrmViewMode('TABLE')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  crmViewMode === 'TABLE'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Traditional Table View"
+              >
+                <LayoutList className="w-3.5 h-3.5" />
+                <span>Table View</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Leads Table */}
-        <div className="bg-[#0d1424] border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-[#080d18] border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                <tr>
-                  <th className="px-5 py-3.5">Business & Local Reputation</th>
-                  <th className="px-5 py-3.5">Phone & 1-Tap WhatsApp</th>
-                  <th className="px-5 py-3.5">Live Prototype Demo</th>
-                  <th className="px-5 py-3.5">Status & Outreach</th>
-                  <th className="px-5 py-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {filteredLeads.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center text-slate-500">
-                      {loading ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
-                          <span>Loading leads queue...</span>
+        {/* VIEW 1: Twenty CRM Visual Kanban Board */}
+        {crmViewMode === 'KANBAN' ? (
+          <div className="overflow-x-auto pb-4 pt-1">
+            <div className="flex gap-4 min-w-[1400px] items-start">
+              {CRM_STAGES.map((col) => {
+                const colLeads = filteredLeads.filter(
+                  (lead) => getLeadStage(lead) === col.id
+                );
+                const colTotalValue = colLeads.reduce(
+                  (sum, l) => sum + (parseFloat(l.deal_value || 0) || 0),
+                  0
+                );
+                const ColIcon = col.icon;
+
+                return (
+                  <div
+                    key={col.id}
+                    className={`flex-1 min-w-[280px] max-w-[340px] bg-[#0c1220] border ${col.colColor} rounded-2xl flex flex-col shadow-xl overflow-hidden`}
+                  >
+                    {/* Column Header */}
+                    <div className={`p-3.5 border-b border-slate-800/80 ${col.headerBg} flex items-center justify-between`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
+                        <span className="text-xs font-bold text-white tracking-wide flex items-center gap-1.5">
+                          <ColIcon className="w-3.5 h-3.5" />
+                          {col.label}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                          {colLeads.length}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-mono font-bold text-slate-300">
+                        ${colTotalValue.toLocaleString()}
+                      </div>
+                    </div>
+
+                    {/* Column Card List */}
+                    <div className="p-3 space-y-3 min-h-[440px] max-h-[75vh] overflow-y-auto">
+                      {colLeads.length === 0 ? (
+                        <div className="h-32 border-2 border-dashed border-slate-800/60 rounded-xl flex items-center justify-center text-slate-600 text-xs font-medium">
+                          No deals in this stage
                         </div>
                       ) : (
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-slate-400">No leads in the queue</p>
-                          <p className="text-xs text-slate-500">Click <strong className="text-cyan-300">"Discover No-Website Leads"</strong> above to extract local businesses without websites.</p>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredLeads.map((lead) => {
-                    const audit = (lead.audit_reports && lead.audit_reports[0]) || null;
-                    const slug = lead.business_slug || (lead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
-                    const phone = lead.phone || extractPhoneFallback(lead.status_reason);
-                    const waUrl = getWhatsAppUrl(lead);
+                        colLeads.map((lead) => {
+                          const phone = lead.phone || extractPhoneFallback(lead.status_reason);
+                          const slug = lead.business_slug || (lead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
+                          const waUrl = getWhatsAppUrl(lead);
+                          const dealVal = parseFloat(lead.deal_value || 0) || 0;
+                          const retVal = parseFloat(lead.retainer_value || 0) || 0;
+                          const priority = lead.priority || 'MEDIUM';
+                          const latestNote = lead.notes && lead.notes.length > 0 ? lead.notes[0] : null;
 
-                    return (
-                      <tr
-                        key={lead.id}
-                        className={`transition group ${
-                          runningLeadId === lead.id
-                            ? 'bg-cyan-950/30 border-l-4 border-l-cyan-400 shadow-inner'
-                            : 'hover:bg-slate-900/50'
-                        }`}
-                      >
-                        
-                        {/* Business & Local Reputation */}
-                        <td className="px-5 py-4">
-                          <div className="font-bold text-white text-sm flex items-center gap-2">
-                            <span>{lead.business_name}</span>
-                            {runningLeadId === lead.id && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 animate-pulse">
-                                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
-                                Active ({elapsedSeconds}s)
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                              <Star className="w-3 h-3 fill-amber-400 text-amber-400" /> {lead.rating || '4.9'} ({lead.review_count || '45'}+ reviews)
-                            </span>
-                            <span className="text-[11px] text-slate-400">
-                              {lead.owner_name} • {lead.city || 'Local Area'} • {lead.category}
-                            </span>
-                          </div>
-                          {lead.email && (
-                            <div className="text-slate-500 text-[11px] flex items-center gap-1.5 mt-1 font-mono">
-                              <Mail className="w-3 h-3 text-slate-500" /> {lead.email}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Phone & 1-Tap WhatsApp */}
-                        <td className="px-5 py-4">
-                          {phone ? (
-                            <div className="space-y-1.5">
-                              <div className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1.5">
-                                <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                <span>{phone}</span>
+                          return (
+                            <div
+                              key={lead.id}
+                              onClick={() => setSelectedCrmLead(lead)}
+                              className="bg-[#0f172a] hover:bg-[#131d33] border border-slate-800 hover:border-slate-700 rounded-xl p-3.5 space-y-2.5 transition shadow-sm cursor-pointer group hover:shadow-cyan-500/5 relative"
+                            >
+                              {/* Top Bar: Title & Rating */}
+                              <div className="flex items-start justify-between gap-2">
+                                <h4 className="text-xs font-bold text-white group-hover:text-cyan-300 transition line-clamp-1">
+                                  {lead.business_name}
+                                </h4>
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 shrink-0">
+                                  <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                                  {lead.rating || '4.9'}
+                                </span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                {waUrl && (
-                                  <a
-                                    href={waUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition shadow-sm"
-                                    title="Open WhatsApp with pre-filled pitch and demo link"
-                                  >
-                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
-                                    <span>WhatsApp Pitch</span>
-                                  </a>
+
+                              {/* Owner & Location */}
+                              <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                                <span className="truncate">{lead.owner_name} • {lead.city || 'Local'}</span>
+                                {priority === 'URGENT' && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 uppercase">Urgent</span>
                                 )}
-                                <a
-                                  href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                                  title="Direct phone call dialer"
+                                {priority === 'HIGH' && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase">High</span>
+                                )}
+                              </div>
+
+                              {/* Deal Financial Tag */}
+                              <div className="flex items-center gap-2 pt-1 border-t border-slate-800/60">
+                                {dealVal > 0 ? (
+                                  <span className="text-xs font-bold font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                    ${dealVal.toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-500 font-mono italic">
+                                    No value set
+                                  </span>
+                                )}
+                                {retVal > 0 && (
+                                  <span className="text-[10px] font-bold font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                    +${retVal}/mo
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Live Demo Prototype Link */}
+                              <div className="flex items-center justify-between text-[11px] bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-800/80">
+                                <span className="text-slate-400 flex items-center gap-1 text-[10px]">
+                                  <Sparkles className="w-3 h-3 text-indigo-400" /> Demo:
+                                </span>
+                                <Link
+                                  href={`/demo/${slug}`}
+                                  target="_blank"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-indigo-300 hover:text-indigo-200 font-mono flex items-center gap-1 hover:underline text-[10px]"
                                 >
-                                  <Phone className="w-3 h-3 text-slate-400" />
-                                  <span>Call</span>
-                                </a>
+                                  /demo/{slug} <ExternalLink className="w-2.5 h-2.5" />
+                                </Link>
+                              </div>
+
+                              {/* Latest Note Snippet */}
+                              {latestNote && (
+                                <div className="text-[10px] text-slate-400 bg-slate-900/60 p-1.5 rounded border border-slate-800/50 line-clamp-2">
+                                  <span className="text-slate-500 font-semibold">Note: </span>
+                                  {latestNote.text}
+                                </div>
+                              )}
+
+                              {/* Fast Outreach & Quick Stage Advance Buttons */}
+                              <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 gap-1.5">
+                                <div className="flex items-center gap-1">
+                                  {waUrl && (
+                                    <a
+                                      href={waUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="p-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition shadow-sm"
+                                      title="Open WhatsApp with pre-filled pitch and demo link"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
+                                  {phone && (
+                                    <a
+                                      href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                                      title="Call business phone"
+                                    >
+                                      <Phone className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
+                                </div>
+
+                                {/* Quick Stage Mover [←] [CRM] [→] */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={(e) => handleQuickMoveStage(lead, -1, e)}
+                                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
+                                    title="Move to previous stage"
+                                  >
+                                    <ChevronLeft className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedCrmLead(lead);
+                                    }}
+                                    className="px-2 py-1 rounded text-[10px] font-semibold bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 transition cursor-pointer"
+                                    title="Open Full CRM Profile & Notes"
+                                  >
+                                    CRM
+                                  </button>
+                                  <button
+                                    onClick={(e) => handleQuickMoveStage(lead, 1, e)}
+                                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
+                                    title="Move to next stage"
+                                  >
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          ) : (
-                            <span className="text-slate-500 text-[11px] italic">No phone captured</span>
-                          )}
-                        </td>
-
-                        {/* Live Prototype Demo */}
-                        <td className="px-5 py-4">
-                          <div className="space-y-1">
-                            <div className="inline-flex items-center gap-1 text-[10px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded">
-                              <Sparkles className="w-3 h-3 text-indigo-400" /> Prototype Mounted
-                            </div>
-                            <Link
-                              href={`/demo/${slug}`}
-                              target="_blank"
-                              className="text-xs text-indigo-300 hover:text-indigo-200 font-mono flex items-center gap-1 underline underline-offset-2 transition"
-                            >
-                              /demo/{slug} <ExternalLink className="w-3 h-3" />
-                            </Link>
-                          </div>
-                        </td>
-
-                        {/* Status & Outreach */}
-                        <td className="px-5 py-4">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                              lead.status === 'SENT'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                                : lead.status === 'QUALIFIED'
-                                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
-                                : lead.status === 'FAILED'
-                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                            }`}
-                          >
-                            {lead.status === 'SENT' && <CheckCircle2 className="w-3 h-3" />}
-                            {lead.status === 'QUALIFIED' && <Smartphone className="w-3 h-3" />}
-                            {lead.status === 'PENDING' && <Clock className="w-3 h-3" />}
-                            {lead.status}
-                          </span>
-                          {lead.status_reason && (
-                            <p className="text-[10px] text-slate-400 mt-1 max-w-[220px] line-clamp-2" title={lead.status_reason}>
-                              {lead.status_reason}
-                            </p>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-5 py-4 text-right">
-                          <div className="inline-flex items-center gap-2">
-                            {audit && (
-                              <button
-                                onClick={() => setSelectedLeadForReport({ lead, audit })}
-                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs transition"
-                                title="Inspect Copy & Generated Assets"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-
-                            <Link
-                              href={`/demo/${slug}`}
-                              target="_blank"
-                              className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded text-xs transition flex items-center gap-1 font-medium"
-                              title="Preview Live Prototype"
-                            >
-                              Demo
-                            </Link>
-
-                            <button
-                              onClick={() => handleProcessNext(lead.id)}
-                              disabled={isProcessing}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                                runningLeadId === lead.id
-                                  ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/60 shadow-lg shadow-cyan-500/20'
-                                  : 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30'
-                              }`}
-                              title={runningLeadId === lead.id ? 'Pipeline Running...' : 'Generate AI Hooks & Process Lead'}
-                            >
-                              {runningLeadId === lead.id ? (
-                                <>
-                                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                                  <span className="animate-pulse text-cyan-300">Running ({elapsedSeconds}s)...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Play className="w-3 h-3" />
-                                  <span>Run</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </td>
-
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        ) : (
+          /* VIEW 2: Traditional Leads Table View */
+          <div className="bg-[#0d1424] border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#080d18] border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-5 py-3.5">Business & Reputation</th>
+                    <th className="px-5 py-3.5">Phone & 1-Tap WhatsApp</th>
+                    <th className="px-5 py-3.5">Live Prototype Demo</th>
+                    <th className="px-5 py-3.5">CRM Stage & Deal Value</th>
+                    <th className="px-5 py-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredLeads.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-12 text-center text-slate-500">
+                        {loading ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
+                            <span>Loading leads queue...</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-slate-400">No leads in the queue</p>
+                            <p className="text-xs text-slate-500">Click <strong className="text-cyan-300">"Discover No-Website Leads"</strong> above to extract local businesses without websites.</p>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredLeads.map((lead) => {
+                      const audit = (lead.audit_reports && lead.audit_reports[0]) || null;
+                      const slug = lead.business_slug || (lead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
+                      const phone = lead.phone || extractPhoneFallback(lead.status_reason);
+                      const waUrl = getWhatsAppUrl(lead);
+                      const stage = getLeadStage(lead);
+                      const dealVal = parseFloat(lead.deal_value || 0) || 0;
+
+                      return (
+                        <tr
+                          key={lead.id}
+                          className={`transition group ${
+                            runningLeadId === lead.id
+                              ? 'bg-cyan-950/30 border-l-4 border-l-cyan-400 shadow-inner'
+                              : 'hover:bg-slate-900/50'
+                          }`}
+                        >
+                          {/* Business & Local Reputation */}
+                          <td className="px-5 py-4">
+                            <div className="font-bold text-white text-sm flex items-center gap-2">
+                              <span>{lead.business_name}</span>
+                              {runningLeadId === lead.id && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 animate-pulse">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping" />
+                                  Active ({elapsedSeconds}s)
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                <Star className="w-3 h-3 fill-amber-400 text-amber-400" /> {lead.rating || '4.9'} ({lead.review_count || '45'}+ reviews)
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                {lead.owner_name} • {lead.city || 'Local Area'} • {lead.category}
+                              </span>
+                            </div>
+                            {lead.email && (
+                              <div className="text-slate-500 text-[11px] flex items-center gap-1.5 mt-1 font-mono">
+                                <Mail className="w-3 h-3 text-slate-500" /> {lead.email}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Phone & 1-Tap WhatsApp */}
+                          <td className="px-5 py-4">
+                            {phone ? (
+                              <div className="space-y-1.5">
+                                <div className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1.5">
+                                  <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                  <span>{phone}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {waUrl && (
+                                    <a
+                                      href={waUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition shadow-sm"
+                                      title="Open WhatsApp with pre-filled pitch and demo link"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                      <span>WhatsApp Pitch</span>
+                                    </a>
+                                  )}
+                                  <a
+                                    href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                                    title="Direct phone call dialer"
+                                  >
+                                    <Phone className="w-3 h-3 text-slate-400" />
+                                    <span>Call</span>
+                                  </a>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 text-[11px] italic">No phone captured</span>
+                            )}
+                          </td>
+
+                          {/* Live Prototype Demo */}
+                          <td className="px-5 py-4">
+                            <div className="space-y-1">
+                              <div className="inline-flex items-center gap-1 text-[10px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded">
+                                <Sparkles className="w-3 h-3 text-indigo-400" /> Prototype Mounted
+                              </div>
+                              <Link
+                                href={`/demo/${slug}`}
+                                target="_blank"
+                                className="text-xs text-indigo-300 hover:text-indigo-200 font-mono flex items-center gap-1 underline underline-offset-2 transition"
+                              >
+                                /demo/{slug} <ExternalLink className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          </td>
+
+                          {/* CRM Stage & Deal Value */}
+                          <td className="px-5 py-4">
+                            <div className="space-y-1.5">
+                              <select
+                                value={stage}
+                                onChange={(e) => handleUpdateLeadStage(lead.id, e.target.value)}
+                                className="bg-[#080d18] border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 font-semibold focus:outline-none focus:border-cyan-500 cursor-pointer"
+                              >
+                                {CRM_STAGES.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="flex items-center gap-1.5">
+                                {dealVal > 0 ? (
+                                  <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                    ${dealVal.toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-500 font-mono">
+                                    $0.00
+                                  </span>
+                                )}
+                                {lead.notes && lead.notes.length > 0 && (
+                                  <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700">
+                                    {lead.notes.length} notes
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-5 py-4 text-right">
+                            <div className="inline-flex items-center gap-2">
+                              <button
+                                onClick={() => setSelectedCrmLead(lead)}
+                                className="px-2.5 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                                title="Open CRM Profile, Notes & Deal Value"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>CRM</span>
+                              </button>
+
+                              {audit && (
+                                <button
+                                  onClick={() => setSelectedLeadForReport({ lead, audit })}
+                                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs transition"
+                                  title="Inspect Copy & Generated Assets"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => handleProcessNext(lead.id)}
+                                disabled={isProcessing}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                                  runningLeadId === lead.id
+                                    ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/60 shadow-lg shadow-cyan-500/20'
+                                    : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30'
+                                }`}
+                                title={runningLeadId === lead.id ? 'Pipeline Running...' : 'Generate AI Hooks & Process Lead'}
+                              >
+                                {runningLeadId === lead.id ? (
+                                  <>
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                                    <span className="animate-pulse text-cyan-300">Running ({elapsedSeconds}s)...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Play className="w-3 h-3" />
+                                    <span>Run</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
       </main>
       )}
@@ -2464,6 +2885,365 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
                   Close Lab
                 </button>
               </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* TWENTY CRM LEAD DETAIL DRAWER & ACTIVITY ENGINE */}
+      {selectedCrmLead && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
+          <div className="bg-[#0b111e] border border-slate-700/80 rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[92dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden ring-1 ring-cyan-500/20">
+            
+            {/* Drawer Top Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-800 bg-[#0e1627] flex items-center justify-between shrink-0 sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 font-black text-lg shrink-0">
+                  {selectedCrmLead.business_name?.[0]?.toUpperCase() || 'B'}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">
+                      {selectedCrmLead.business_name}
+                    </h3>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                      {selectedCrmLead.rating || '4.9'} ({selectedCrmLead.review_count || '45'}+ reviews)
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {selectedCrmLead.city || 'Local Area'} • {selectedCrmLead.category} • Stage: <strong className="text-cyan-300 uppercase">{crmEditStage.replace('_', ' ')}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedCrmLead(null)}
+                  className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+                  title="Close Profile"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Split Workspace Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 select-text">
+              
+              {/* Left Column (7 Cols): 1-Tap Outreach & Activity Timeline */}
+              <div className="lg:col-span-7 space-y-6">
+                
+                {/* 1-Tap Fast Outreach Bar */}
+                <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 space-y-3 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-cyan-400" /> Fast Client Outreach
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
+                      Direct WhatsApp Mode
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2.5">
+                    {getWhatsAppUrl(selectedCrmLead) && (
+                      <a
+                        href={getWhatsAppUrl(selectedCrmLead)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 transition active:scale-95 cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>1-Tap WhatsApp Pitch</span>
+                      </a>
+                    )}
+                    {crmEditPhone && (
+                      <a
+                        href={`tel:${crmEditPhone.replace(/[^0-9+]/g, '')}`}
+                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Direct Call</span>
+                      </a>
+                    )}
+                    <Link
+                      href={`/demo/${selectedCrmLead.business_slug || (selectedCrmLead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                      target="_blank"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Live Demo Prototype</span>
+                      <ExternalLink className="w-3 h-3 ml-0.5" />
+                    </Link>
+                  </div>
+                </div>
+
+                {/* Notes & Activity Timeline */}
+                <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-indigo-400" /> Activity Log & Meeting Notes
+                    </h4>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {selectedCrmLead.notes?.length || 0} Total Entries
+                    </span>
+                  </div>
+
+                  {/* Add Note Form */}
+                  <form onSubmit={handleAddNote} className="space-y-2.5">
+                    <textarea
+                      rows={2}
+                      placeholder="Log call summary, client feedback, agreed deal terms, or objections..."
+                      value={newNoteInput}
+                      onChange={(e) => setNewNoteInput(e.target.value)}
+                      className="w-full bg-[#080d18] border border-slate-700/80 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition resize-none"
+                    />
+
+                    {/* Quick chips */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                      <span className="text-slate-500 font-medium">Quick Tag:</span>
+                      <button
+                        type="button"
+                        onClick={() => setNewNoteInput('📱 Sent WhatsApp pitch with live demo link. Awaiting reply.')}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        📱 Sent Pitch
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewNoteInput('💬 Called owner. Interested in $500 website build. Follow up on Friday.')}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        💬 Interested ($500)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewNoteInput('💎 Agreed to $50/mo monthly care retainer for hosting & updates.')}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        💎 Retainer ($50/mo)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewNoteInput('❌ Owner not interested in a website at this time.')}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+                      >
+                        ❌ Not Interested
+                      </button>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="submit"
+                        disabled={!newNoteInput.trim()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Note</span>
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Chronological Notes History */}
+                  <div className="space-y-2.5 pt-2 border-t border-slate-800">
+                    {(!selectedCrmLead.notes || selectedCrmLead.notes.length === 0) ? (
+                      <div className="text-center py-6 text-slate-500 text-xs italic">
+                        No activity notes recorded yet. Type above to log your first call or pitch!
+                      </div>
+                    ) : (
+                      selectedCrmLead.notes.map((note) => (
+                        <div
+                          key={note.id}
+                          className="bg-[#080d18] border border-slate-800 rounded-xl p-3 space-y-1.5 text-xs"
+                        >
+                          <div className="flex items-center justify-between text-[10px] text-slate-400">
+                            <span className="font-semibold text-indigo-300">{note.author || 'Moses Martin'}</span>
+                            <span className="font-mono text-slate-500">
+                              {new Date(note.createdAt).toLocaleDateString()} at{' '}
+                              {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-slate-200 whitespace-pre-wrap leading-relaxed">
+                            {note.text}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column (5 Cols): Twenty CRM Properties & Deal Closer */}
+              <div className="lg:col-span-5 space-y-5">
+                
+                <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 space-y-4 shadow-inner">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" /> Deal & Pipeline Properties
+                    </h4>
+                    {crmSaveSuccess && (
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 animate-fadeIn">
+                        Saved ✓
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Stage Dropdown */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                      Pipeline Stage
+                    </label>
+                    <select
+                      value={crmEditStage}
+                      onChange={(e) => setCrmEditStage(e.target.value)}
+                      className="w-full bg-[#080d18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-semibold focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+                    >
+                      {CRM_STAGES.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Deal Value ($) */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                        Website Deal Value ($)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-mono">$</span>
+                        <input
+                          type="number"
+                          step="50"
+                          value={crmEditDealValue}
+                          onChange={(e) => setCrmEditDealValue(e.target.value)}
+                          className="w-full bg-[#080d18] border border-slate-700 rounded-xl pl-7 pr-3 py-2 text-xs font-mono text-emerald-300 font-bold focus:outline-none focus:border-cyan-500 transition"
+                          placeholder="500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Monthly Retainer ($/mo) */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                        Monthly Retainer ($/mo)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-mono">$</span>
+                        <input
+                          type="number"
+                          step="25"
+                          value={crmEditRetainerValue}
+                          onChange={(e) => setCrmEditRetainerValue(e.target.value)}
+                          className="w-full bg-[#080d18] border border-slate-700 rounded-xl pl-7 pr-3 py-2 text-xs font-mono text-amber-300 font-bold focus:outline-none focus:border-cyan-500 transition"
+                          placeholder="75"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Priority & Follow Up Date */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                        Priority Level
+                      </label>
+                      <select
+                        value={crmEditPriority}
+                        onChange={(e) => setCrmEditPriority(e.target.value)}
+                        className="w-full bg-[#080d18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+                      >
+                        <option value="LOW">Low</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="HIGH">High</option>
+                        <option value="URGENT">Urgent 🔥</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                        Next Follow-Up Date
+                      </label>
+                      <input
+                        type="date"
+                        value={crmEditFollowUp}
+                        onChange={(e) => setCrmEditFollowUp(e.target.value)}
+                        className="w-full bg-[#080d18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 transition"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Decision Maker Contact Fields */}
+                  <div className="pt-2 border-t border-slate-800 space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                        Owner / Decision Maker Name
+                      </label>
+                      <input
+                        type="text"
+                        value={crmEditOwner}
+                        onChange={(e) => setCrmEditOwner(e.target.value)}
+                        className="w-full bg-[#080d18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 transition"
+                        placeholder="John Doe"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                        Phone Number
+                      </label>
+                      <input
+                        type="text"
+                        value={crmEditPhone}
+                        onChange={(e) => setCrmEditPhone(e.target.value)}
+                        className="w-full bg-[#080d18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 transition font-mono"
+                        placeholder="+1 (214) 555-0199"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={crmEditEmail}
+                        onChange={(e) => setCrmEditEmail(e.target.value)}
+                        className="w-full bg-[#080d18] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 transition font-mono"
+                        placeholder="owner@example.com"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="pt-3">
+                    <button
+                      type="button"
+                      onClick={handleSaveCrmDrawer}
+                      disabled={isSavingCrm}
+                      className="w-full py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-lg shadow-blue-600/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {isSavingCrm ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Saving to CRM...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Save CRM Record</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                </div>
+
+              </div>
+
             </div>
 
           </div>
