@@ -1,134 +1,23 @@
 import React from 'react';
-import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { notFound } from 'next/navigation';
+import { getSupabaseAdmin } from '@/lib/supabase';
+import { currentDemoDraft } from '@/lib/manualDemo.mjs';
 import { getIndustryTheme } from '@/lib/demoThemes';
+import { demoServices } from '@/lib/leadServices.mjs';
 import DemoPrototypeClient from '@/components/DemoPrototypeClient';
-import fs from 'fs';
-import path from 'path';
-
 export const dynamic = 'force-dynamic';
-
-const BACKUP_FILE = path.join(process.cwd(), 'data', 'fallback_leads.json');
-
-function loadFallbackLeads() {
-  if (fs.existsSync(BACKUP_FILE)) {
-    try {
-      return JSON.parse(fs.readFileSync(BACKUP_FILE, 'utf8') || '[]');
-    } catch (e) {
-      return [];
-    }
-  }
-  return [];
-}
-
-// Fallback generator for demo if database record is fresh or during direct preview
-function getMockLeadFromSlug(slug) {
-  const words = (slug || 'business-demo').split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1));
-  const businessName = words.join(' ');
-
-  // Auto-detect common industry types from slug words
-  const slugLower = (slug || '').toLowerCase();
-  let detectedCategory = 'Professional Services';
-  if (
-    slugLower.includes('travel') || 
-    slugLower.includes('tour') || 
-    slugLower.includes('ghaith') || 
-    slugLower.includes('umrah') || 
-    slugLower.includes('umra') || 
-    slugLower.includes('hajj') || 
-    slugLower.includes('ziyarat') || 
-    slugLower.includes('trip') || 
-    slugLower.includes('flight') || 
-    slugLower.includes('visa')
-  ) {
-    detectedCategory = 'Travel & Tourism';
-  }
-  else if (slugLower.includes('roof') || slugLower.includes('construct')) detectedCategory = 'Roofing & Contracting';
-  else if (slugLower.includes('dent') || slugLower.includes('clinic')) detectedCategory = 'Dental & Medical';
-  else if (slugLower.includes('auto') || slugLower.includes('car') || slugLower.includes('detail')) detectedCategory = 'Automotive & Detailing';
-  else if (slugLower.includes('law') || slugLower.includes('attorney')) detectedCategory = 'Legal Representation';
-  else if (slugLower.includes('food') || slugLower.includes('cafe') || slugLower.includes('restaurant')) detectedCategory = 'Restaurant & Dining';
-  else if (slugLower.includes('real') || slugLower.includes('estate')) detectedCategory = 'Luxury Real Estate';
-  else if (slugLower.includes('spa') || slugLower.includes('salon') || slugLower.includes('beauty')) detectedCategory = 'Luxury Salon & Spa';
-  else if (slugLower.includes('tech') || slugLower.includes('saas') || slugLower.includes('software') || slugLower.includes('dmz')) detectedCategory = 'Technology & Digital Solutions';
-
-  return {
-    business_name: businessName || 'Apex Premier Services',
-    owner_name: 'Team',
-    category: detectedCategory,
-    city: 'Local Area',
-    services: [],
-    rating: 4.9,
-    review_count: 64,
-    phone: '+1 (214) 555-0182',
-  };
-}
-
-async function getLeadBySlug(slug) {
-  const resolveLead = (l) => {
-    if (!l) return l;
-    let phone = l.phone;
-    if (!phone && l.status_reason) {
-      const match = l.status_reason.match(/(?:Phone:\s*|tel:)([\+\d\s\(\)\-\.]{7,25})/i);
-      if (match) phone = match[1].trim();
-    }
-
-    let services = [];
-    if (Array.isArray(l.services) && l.services.length > 0) {
-      services = l.services;
-    } else if (typeof l.services === 'string' && l.services.trim()) {
-      services = l.services.split(',').map((s) => s.trim()).filter(Boolean);
-    }
-
-    return { 
-      ...l, 
-      phone: phone || '+1 (214) 555-0182',
-      address: l.address || (l.city ? `${l.city}` : 'Local Service Area'),
-      services,
-      rating: parseFloat(l.rating) || 4.9,
-      review_count: parseInt(l.review_count, 10) || 45,
-    };
-  };
-
-  // 1. Try Supabase
-  if (isSupabaseConfigured) {
-    try {
-      const supabase = getSupabaseAdmin();
-      const { data, error } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('business_slug', slug)
-        .maybeSingle();
-
-      if (!error && data) return resolveLead(data);
-
-      const { data: list } = await supabase.from('leads').select('*').limit(300);
-      const match = list?.find(
-        (l) => l.business_slug === slug || (l.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-') === slug
-      );
-      if (match) return resolveLead(match);
-    } catch (e) {
-      console.warn('Supabase lead fetch notice in demo page:', e.message);
-    }
-  }
-
-  // 2. Fallback to local storage
-  const fallbackList = loadFallbackLeads();
-  const localMatch = fallbackList.find(
-    (l) => l.business_slug === slug || (l.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-') === slug
-  );
-  if (localMatch) return resolveLead(localMatch);
-
-  return getMockLeadFromSlug(slug);
-}
-
-export default async function DemoPrototypePage({ params }) {
-  const lead = await getLeadBySlug(params?.slug);
-  const theme = getIndustryTheme(lead);
-
-  return (
-    <DemoPrototypeClient 
-      initialLead={lead}
-      initialTheme={theme}
-    />
-  );
+export const metadata = { robots: { index: false, follow: false }, other: { 'synergy-demo-version': 'manual-demo-v1' } };
+export default async function DemoPrototypePage({ params, searchParams }) {
+  if (!/^[0-9a-f-]{36}$/i.test(searchParams?.draft || '')) notFound();
+  const db = getSupabaseAdmin();
+  const { data: report, error } = await db.from('audit_reports').select('*,leads(*)').eq('id', searchParams.draft).maybeSingle();
+  if (error || !report?.leads) notFound();
+  const lead = report.leads;
+  const draft = currentDemoDraft(lead, [report]);
+  if (!draft) notFound();
+  const url = new URL(draft.prototype_url);
+  if (url.pathname !== `/demo/${params.slug}` || url.searchParams.get('v') !== searchParams.v) notFound();
+  const { services, suggested } = demoServices(lead);
+  const publicLead = { business_name: lead.business_name, category: lead.category, city: lead.city, services, services_suggested: suggested };
+  return <DemoPrototypeClient initialLead={publicLead} initialTheme={getIndustryTheme(lead)} />;
 }

@@ -1,3 +1,6 @@
+import { requestAccess } from '@/lib/websiteRequestAccess';
+import { syntheticLeadReason } from '@/lib/leadSafety.mjs';
+import { currentDemoDraft } from '@/lib/manualDemo.mjs';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import fs from 'fs';
@@ -25,7 +28,8 @@ function extractPhone(lead) {
   return match ? match[1].trim() : null;
 }
 
-export async function GET() {
+export async function GET(req) {
+  const access = requestAccess(req); if (access.error) return access.error;
   let leads = [];
 
   if (isSupabaseConfigured) {
@@ -33,7 +37,7 @@ export async function GET() {
       const supabase = getSupabaseAdmin();
       const { data, error } = await supabase
         .from('leads')
-        .select('*');
+        .select('*,audit_reports(*)');
 
       if (!error && data) {
         leads = data;
@@ -48,6 +52,9 @@ export async function GET() {
     leads = loadFallbackLeads();
   }
 
+  const blockedCount = leads.filter(syntheticLeadReason).length;
+  const totalCount = leads.length;
+  leads = leads.filter(lead => !syntheticLeadReason(lead));
   const withPhoneCount = leads.filter((l) => Boolean(extractPhone(l))).length;
 
   const getLeadStage = (l) => {
@@ -96,7 +103,8 @@ export async function GET() {
 
   const stats = {
     configured: true,
-    totalLeads: leads.length,
+    totalLeads: totalCount,
+    blockedContacts: blockedCount,
     pending: leads.filter((l) => l.status === 'PENDING').length,
     sent: leads.filter((l) => l.status === 'SENT').length,
     qualified: leads.filter((l) => l.status === 'QUALIFIED').length,
@@ -104,7 +112,7 @@ export async function GET() {
     failed: leads.filter((l) => l.status === 'FAILED').length,
     withPhone: withPhoneCount,
     noWebsite: leads.filter((l) => !l.has_website).length,
-    prototypesReady: leads.length,
+    prototypesReady: leads.filter(lead => currentDemoDraft(lead)).length,
     // Twenty CRM Financial Metrics
     pipelineValue,
     closedWonValue,

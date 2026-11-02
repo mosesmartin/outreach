@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import LeadDemoActions from '@/components/LeadDemoActions';
 import { useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import {
@@ -155,18 +156,11 @@ export default function OutreachDashboard() {
   };
 
   const getWhatsAppUrl = (lead) => {
-    const phone = lead.phone || extractPhoneFallback(lead.status_reason);
+    if (!lead.demo || lead.contact_safety?.blocked) return null;
+    const phone = lead.contact_safety?.blocked ? null : (lead.phone || extractPhoneFallback(lead.status_reason));
     if (!phone) return null;
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const slug = lead.business_slug || (lead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
-    const appBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://synergytechsol.com';
-    const demoUrl = `${appBaseUrl}/demo/${slug}`;
-    const owner = lead.owner_name && lead.owner_name !== 'Team' && !lead.owner_name.toLowerCase().includes('leadership')
-      ? lead.owner_name.split(' ')[0]
-      : lead.business_name;
-    
-    const text = `Hi ${owner}, I saw your ${lead.rating || 4.9}★ reviews on Google Maps in ${lead.city || 'your area'}. Noticed you don't have an official website yet, so our team built a live mobile prototype specifically for ${lead.business_name}: ${demoUrl} - Take a look on your phone and let me know your thoughts!`;
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+    const message = `Hi, I prepared a website concept for ${lead.business_name}: ${lead.demo.prototype_url}. Is this something you would like to discuss?`;
+    return `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
   };
 
   // Modals
@@ -285,7 +279,7 @@ export default function OutreachDashboard() {
     has_website: false,
     category: 'Home & Commercial Services',
     city: 'Dallas, TX',
-    services: 'Rapid Quotes, Verified Service, Direct Booking',
+    services: '',
   });
 
   // CSV Drag and drop / file input
@@ -344,6 +338,10 @@ export default function OutreachDashboard() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (currentUser) fetchDashboardData();
+  }, [currentUser]);
 
 
   const handleClearAllData = async () => {
@@ -489,137 +487,6 @@ export default function OutreachDashboard() {
     });
   };
 
-  const handleProcessNext = async (specificLeadId) => {
-    const targetLead = specificLeadId
-      ? leads.find((l) => l.id === specificLeadId)
-      : leads.find((l) => l.status === 'PENDING') || leads[0];
-    const targetName = targetLead?.business_name || (specificLeadId ? 'Selected Lead' : 'Next Pending Lead');
-    const isFunnelA = targetLead ? targetLead.has_website : true;
-
-    setIsProcessing(true);
-    setRunningLeadId(specificLeadId || targetLead?.id || 'pending');
-
-    setPipelineMonitor({
-      show: true,
-      businessName: targetName,
-      lead: targetLead,
-      step: 1,
-      stepText: '1. Initializing target lead & verifying deliverability...',
-      percent: 12,
-      status: 'running',
-      logs: [`[0.0s] Initializing live execution engine for ${targetName}...`],
-      result: null,
-      error: null,
-    });
-
-    try {
-      // 1. Try real-time streaming endpoint (SSE)
-      const res = await fetch('/api/leads/process-stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadId: specificLeadId }),
-      });
-
-      if (res.ok && res.body) {
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('data: ')) {
-              try {
-                const eventData = JSON.parse(trimmed.slice(6));
-                setPipelineMonitor((prev) => {
-                  const newLogs = eventData.log
-                    ? [...(prev?.logs || []), eventData.log]
-                    : prev?.logs || [];
-
-                  return {
-                    show: true,
-                    businessName: eventData.businessName || prev?.businessName || targetName,
-                    lead: eventData.lead || prev?.lead || targetLead,
-                    step: eventData.step || prev?.step || 1,
-                    percent: eventData.percent !== undefined ? eventData.percent : (prev?.percent || 15),
-                    stepText: eventData.stepText || prev?.stepText || '',
-                    status: eventData.status || prev?.status || 'running',
-                    logs: newLogs,
-                    result: eventData.result || prev?.result || null,
-                    error: eventData.error || prev?.error || null,
-                  };
-                });
-              } catch (parseErr) {
-                console.warn('SSE parse error:', parseErr);
-              }
-            }
-          }
-        }
-      } else {
-        // Fallback to non-streaming POST if streaming is unavailable
-        const fallbackRes = await fetch('/api/leads/process-single', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ leadId: specificLeadId }),
-        });
-        const fallbackData = await fallbackRes.json();
-
-        if (fallbackData.processed && fallbackData.result) {
-          setPipelineMonitor((prev) => ({
-            show: true,
-            businessName: fallbackData.result.businessName || targetName,
-            lead: targetLead,
-            step: 6,
-            percent: 100,
-            status: 'completed',
-            stepText: '6. Pipeline Completed & Cold Outreach Dispatched!',
-            logs: [...(prev?.logs || []), `[Done] Processed -> Status: ${fallbackData.result.status}`],
-            result: fallbackData.result,
-            error: null,
-          }));
-        } else {
-          setPipelineMonitor((prev) => ({
-            show: true,
-            businessName: targetName,
-            lead: targetLead,
-            step: 6,
-            percent: 100,
-            status: fallbackData.error ? 'error' : 'completed',
-            stepText: fallbackData.message || fallbackData.error || 'Finished.',
-            logs: [...(prev?.logs || []), fallbackData.message || fallbackData.error || 'Finished.'],
-            result: null,
-            error: fallbackData.error || null,
-          }));
-        }
-      }
-
-      await fetchDashboardData();
-    } catch (err) {
-      setPipelineMonitor((prev) => ({
-        show: true,
-        businessName: targetName,
-        lead: targetLead,
-        step: 6,
-        percent: 100,
-        status: 'error',
-        stepText: `Pipeline exception: ${err.message}`,
-        logs: [...(prev?.logs || []), `Execution error: ${err.message}`],
-        result: null,
-        error: err.message,
-      }));
-    } finally {
-      setIsProcessing(false);
-      setRunningLeadId(null);
-    }
-  };
-
   const handleAddSingleLead = async (e) => {
     e.preventDefault();
     try {
@@ -652,7 +519,7 @@ export default function OutreachDashboard() {
           has_website: false,
           category: 'Home & Commercial Services',
           city: 'Dallas, TX',
-          services: 'Rapid Quotes, Verified Service, Direct Booking',
+          services: '',
         });
         await fetchDashboardData();
       } else {
@@ -750,7 +617,7 @@ export default function OutreachDashboard() {
           const phoneInfo = data.withPhoneCount ? `${data.withPhoneCount} WhatsApp Phones` : '';
           const contactStats = [emailInfo, phoneInfo].filter(Boolean).join(' • ');
 
-          let successMsg = `Successfully acquired ${data.totalSaved} verified leads for "${discoveryNiche}" in ${discoveryLocation}!`;
+          let successMsg = `Successfully acquired ${data.totalSaved} sourced leads for "${discoveryNiche}" in ${discoveryLocation}!`;
           if (contactStats) {
             successMsg += ` (${contactStats})`;
           }
@@ -808,7 +675,7 @@ export default function OutreachDashboard() {
     <div className="min-h-screen bg-[#070b13] text-slate-100 flex flex-col">
       {/* Top Brand Navigation */}
       <header className="border-b border-slate-800/80 bg-[#0c1220]/90 backdrop-blur-lg sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-3 flex flex-wrap gap-3 items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20 font-black text-white text-lg">
               S
@@ -876,7 +743,11 @@ export default function OutreachDashboard() {
 
       {/* Main Leads Acquisition & Outreach Engine */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-8">
-        
+        <nav aria-label="Acquisition tools" className="flex flex-wrap gap-2">
+          <Link href="/" aria-current="page" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-blue-500/40 bg-blue-600/20 px-4 py-2 text-sm font-semibold text-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"><Briefcase className="h-4 w-4" aria-hidden="true" />Business leads</Link>
+          <Link href="/website-requests" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"><Search className="h-4 w-4" aria-hidden="true" />Website Requests</Link>
+        </nav>
+
         {/* Supabase status notice if not yet connected */}
         {!loading && !stats.configured && (
           <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -967,10 +838,10 @@ export default function OutreachDashboard() {
             </div>
           </div>
 
-          {/* Card 5: Verified WhatsApp & Phone */}
+          {/* Card 5: Public phone contacts & Phone */}
           <div className="bg-[#0f172a]/90 border border-slate-800/80 rounded-xl p-4 shadow-sm">
             <div className="flex items-center justify-between text-emerald-400 text-xs font-medium">
-              <span>Verified WhatsApp</span>
+              <span>Public phone contacts</span>
               <Phone className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-2xl font-bold text-emerald-300 mt-2">
@@ -991,7 +862,7 @@ export default function OutreachDashboard() {
               {leads.length}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
-              Mounted at /demo/[slug]
+              Manually generated previews
             </div>
           </div>
         </div>
@@ -1015,13 +886,13 @@ export default function OutreachDashboard() {
                   Target Local Keyword & City • Strict Zero-Website Leads Scraping
                 </h3>
                 <p className="text-xs text-slate-400 max-w-2xl">
-                  Deep crawls Google Maps on your keyword, automatically drops every company that already has a website, and extracts only businesses WITHOUT websites with verified Phone numbers, exact Addresses, Services, and Google Stars.
+                  Deep crawls Google Maps on your keyword, automatically drops every company that already has a website, and extracts only businesses WITHOUT websites with public contact details and available listing information. Review their source before outreach.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-[11px] font-mono px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-bold flex items-center gap-1.5 shadow-inner">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> 100% Zero-Website Guaranteed
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> No website listed
                 </span>
               </div>
             </div>
@@ -1152,6 +1023,8 @@ export default function OutreachDashboard() {
           </div>
         </div>
 
+        {leads.some(lead => lead.contact_safety?.blocked) && <div role="alert" className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-4 text-sm leading-6 text-rose-200">{leads.filter(lead => lead.contact_safety?.blocked).length} old contacts are blocked because they match simulated or placeholder data. They cannot generate demos or send invitations. Their history has been preserved.</div>}
+
         {/* Operational Control Bar & Actions */}
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-[#0d1424] border border-slate-800/90 rounded-2xl p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-3">
@@ -1179,14 +1052,7 @@ export default function OutreachDashboard() {
               Add Single Lead
             </button>
 
-            <button
-              onClick={() => handleProcessNext()}
-              disabled={isProcessing}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/25 transition active:scale-95 disabled:opacity-75 cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin text-white' : ''}`} />
-              {isProcessing ? `⚡ Pipeline Running (${elapsedSeconds}s)...` : '⚡ Process Next Lead Now'}
-            </button>
+            <p className="text-xs leading-5 text-slate-300">Generate each demo separately, review it, then send its invitation.</p>
 
             <button
               onClick={handleClearAllData}
@@ -1217,7 +1083,7 @@ export default function OutreachDashboard() {
               High-Ticket Client Ladder
             </span>
           </div>
-          
+
           <div className="grid md:grid-cols-3 gap-4">
             {/* Step 1 */}
             <div className="p-4 rounded-xl bg-slate-900/70 border border-indigo-500/30 space-y-2 relative overflow-hidden">
@@ -1230,7 +1096,7 @@ export default function OutreachDashboard() {
                 </span>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                We generate a bespoke, ultra-fast mobile prototype at <code className="text-indigo-300">/demo/[slug]</code> featuring their Google reviews, star rating, and 1-tap quote form. Seeing their own live website creates instant buying intent!
+                Import sourced contacts first. Generate a demo only for a selected business, check its services and recipient, then send a reviewed invitation.
               </p>
             </div>
 
@@ -1241,11 +1107,11 @@ export default function OutreachDashboard() {
                   <MessageCircle className="w-3.5 h-3.5 text-emerald-400" /> STEP 2: 1-Tap WhatsApp & Call Pitch
                 </span>
                 <span className="text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-mono font-bold">
-                  80%+ Open Rate
+                  Manual contact review
                 </span>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Reach out directly on WhatsApp or direct phone call with their personalized demo link. Zero email spam resistance. Business owners review the site on mobile within minutes.
+                Reach out directly on WhatsApp or direct phone call with their personalized demo link. Verify the recipient and review the demo before sending. Replies are not guaranteed.
               </p>
             </div>
 
@@ -1381,7 +1247,7 @@ export default function OutreachDashboard() {
                         </div>
                       ) : (
                         colLeads.map((lead) => {
-                          const phone = lead.phone || extractPhoneFallback(lead.status_reason);
+                          const phone = lead.contact_safety?.blocked ? null : (lead.phone || extractPhoneFallback(lead.status_reason));
                           const slug = lead.business_slug || (lead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
                           const waUrl = getWhatsAppUrl(lead);
                           const dealVal = parseFloat(lead.deal_value || 0) || 0;
@@ -1402,7 +1268,7 @@ export default function OutreachDashboard() {
                                 </h4>
                                 <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 shrink-0">
                                   <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                                  {lead.rating || '4.9'} ({lead.review_count || 45})
+                                  {lead.rating ?? '?'} ({lead.review_count ?? '?'})
                                 </span>
                               </div>
 
@@ -1458,20 +1324,7 @@ export default function OutreachDashboard() {
                                 )}
                               </div>
 
-                              {/* Live Demo Prototype Link */}
-                              <div className="flex items-center justify-between text-[11px] bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-800/80">
-                                <span className="text-slate-400 flex items-center gap-1 text-[10px]">
-                                  <Sparkles className="w-3 h-3 text-indigo-400" /> Demo:
-                                </span>
-                                <Link
-                                  href={`/demo/${slug}`}
-                                  target="_blank"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-indigo-300 hover:text-indigo-200 font-mono flex items-center gap-1 hover:underline text-[10px]"
-                                >
-                                  /demo/{slug} <ExternalLink className="w-2.5 h-2.5" />
-                                </Link>
-                              </div>
+                              <LeadDemoActions lead={lead} onRefresh={fetchDashboardData} />
 
                               {/* Latest Note Snippet */}
                               {latestNote && (
@@ -1581,7 +1434,7 @@ export default function OutreachDashboard() {
                     filteredLeads.map((lead) => {
                       const audit = (lead.audit_reports && lead.audit_reports[0]) || null;
                       const slug = lead.business_slug || (lead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
-                      const phone = lead.phone || extractPhoneFallback(lead.status_reason);
+                      const phone = lead.contact_safety?.blocked ? null : (lead.phone || extractPhoneFallback(lead.status_reason));
                       const waUrl = getWhatsAppUrl(lead);
                       const stage = getLeadStage(lead);
                       const dealVal = parseFloat(lead.deal_value || 0) || 0;
@@ -1608,7 +1461,7 @@ export default function OutreachDashboard() {
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                                <Star className="w-3 h-3 fill-amber-400 text-amber-400" /> {lead.rating || '4.9'} ({lead.review_count || '45'}+ reviews)
+                                <Star className="w-3 h-3 fill-amber-400 text-amber-400" /> {lead.rating ?? '?'} ({lead.review_count || '45'}+ reviews)
                               </span>
                               <span className="text-[11px] text-slate-400">
                                 {lead.address || lead.city || 'Local Area'} • <strong className="text-cyan-300">{lead.category}</strong>
@@ -1663,20 +1516,7 @@ export default function OutreachDashboard() {
                           </td>
 
                           {/* Live Prototype Demo */}
-                          <td className="px-5 py-4">
-                            <div className="space-y-1">
-                              <div className="inline-flex items-center gap-1 text-[10px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded">
-                                <Sparkles className="w-3 h-3 text-indigo-400" /> Prototype Mounted
-                              </div>
-                              <Link
-                                href={`/demo/${slug}`}
-                                target="_blank"
-                                className="text-xs text-indigo-300 hover:text-indigo-200 font-mono flex items-center gap-1 underline underline-offset-2 transition"
-                              >
-                                /demo/{slug} <ExternalLink className="w-3 h-3" />
-                              </Link>
-                            </div>
-                          </td>
+                          <td className="px-5 py-4"><LeadDemoActions lead={lead} onRefresh={fetchDashboardData} /></td>
 
                           {/* CRM Stage & Deal Value */}
                           <td className="px-5 py-4">
@@ -1733,28 +1573,7 @@ export default function OutreachDashboard() {
                                 </button>
                               )}
 
-                              <button
-                                onClick={() => handleProcessNext(lead.id)}
-                                disabled={isProcessing}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                                  runningLeadId === lead.id
-                                    ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/60 shadow-lg shadow-cyan-500/20'
-                                    : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30'
-                                }`}
-                                title={runningLeadId === lead.id ? 'Pipeline Running...' : 'Generate AI Hooks & Process Lead'}
-                              >
-                                {runningLeadId === lead.id ? (
-                                  <>
-                                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                                    <span className="animate-pulse text-cyan-300">Running ({elapsedSeconds}s)...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Play className="w-3 h-3" />
-                                    <span>Run</span>
-                                  </>
-                                )}
-                              </button>
+
                             </div>
                           </td>
                         </tr>
@@ -1773,7 +1592,7 @@ export default function OutreachDashboard() {
       {showDiscoveryModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-[#0c1322] border border-slate-800 rounded-2xl sm:rounded-3xl max-w-xl w-full max-h-[90dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden">
-            
+
             {/* Sticky Header */}
             <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between shrink-0 bg-[#0c1322] sticky top-0 z-10">
               <div className="flex items-center gap-2.5 font-bold text-base text-white">
@@ -1824,7 +1643,7 @@ export default function OutreachDashboard() {
                     <span>Google Maps No-Website Acquisition Scraper</span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Exclusively discovers businesses that <strong>have no website</strong>, extracts their verified direct phone numbers for WhatsApp & calling, and generates a live mobile prototype at <code className="text-cyan-300 font-mono">/demo/[slug]</code>!
+                    Exclusively discovers businesses that <strong>have no website</strong>, extracts their public phone numbers for WhatsApp & calling, and saves contacts for review. Demos are generated separately using the Generate demo button.
                   </p>
                 </div>
                     {/* High-Demand US Search Trends & Conversion Hotspots */}
@@ -1923,7 +1742,7 @@ export default function OutreachDashboard() {
                         </label>
                         <span className="text-cyan-400 font-mono font-bold text-xs">{discoveryMaxLeads} Leads Target</span>
                       </div>
-                      
+
                       {/* Bulk Quick Presets */}
                       <div className="grid grid-cols-4 gap-2 mb-2">
                         {[50, 100, 200, 300].map((count) => (
@@ -1965,7 +1784,7 @@ export default function OutreachDashboard() {
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" /> 360° Omnichannel Acquisition Engine:
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Crawls Google Maps across multi-district queries on <strong className="text-white">"{discoveryNiche || 'Keyword'}"</strong>. Automatically visits websites to crawl verified company inboxes (<code className="text-cyan-300 font-mono">contact@, owner@</code>) for cold email campaigns, and extracts phone numbers for WhatsApp pitching with live demo prototypes.
+                    Crawls Google Maps across multi-district queries on <strong className="text-white">"{discoveryNiche || 'Keyword'}"</strong>. Automatically visits websites to crawl public company inboxes (<code className="text-cyan-300 font-mono">contact@, owner@</code>) for cold email campaigns, and extracts phone numbers for WhatsApp pitching with live demo prototypes.
                   </p>
                   <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[10px] text-slate-400">
                     <div className="flex items-center gap-1">
@@ -2021,7 +1840,7 @@ export default function OutreachDashboard() {
       {showCsvModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-[#0c1322] border border-slate-800 rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[90dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden">
-            
+
             {/* Sticky Header */}
             <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between shrink-0 bg-[#0c1322] sticky top-0 z-10">
               <div className="flex items-center gap-2 font-bold text-base text-white">
@@ -2123,7 +1942,7 @@ export default function OutreachDashboard() {
       {showSingleLeadModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-[#0c1322] border border-slate-800 rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[90dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden">
-            
+
             {/* Sticky Header */}
             <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between shrink-0 bg-[#0c1322] sticky top-0 z-10">
               <div className="flex items-center gap-2 font-bold text-base text-white">
@@ -2192,7 +2011,7 @@ export default function OutreachDashboard() {
                     <span>Instant Live Prototype Engine Active</span>
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    A personalized live mobile prototype will be mounted at <code className="text-indigo-300 font-mono">/demo/[slug]</code> for 1-tap WhatsApp and phone pitching!
+                    Save the business first. Generate and review its demo separately before sending an invitation.
                   </p>
                 </div>
 
@@ -2256,7 +2075,7 @@ export default function OutreachDashboard() {
       {showWebhookGuide && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-[#0c1322] border border-slate-800 rounded-2xl sm:rounded-3xl max-w-xl w-full max-h-[90dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden">
-            
+
             {/* Sticky Header */}
             <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between shrink-0 bg-[#0c1322] sticky top-0 z-10">
               <div className="flex items-center gap-2 font-bold text-base text-white">
@@ -2324,7 +2143,7 @@ export default function OutreachDashboard() {
       {showSchemaGuide && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-[#0c1322] border border-slate-800 rounded-2xl sm:rounded-3xl max-w-2xl w-full max-h-[90dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden">
-            
+
             {/* Sticky Header */}
             <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between shrink-0 bg-[#0c1322] sticky top-0 z-10">
               <div className="flex items-center gap-2 font-bold text-base text-white">
@@ -2417,7 +2236,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
       {selectedLeadForReport && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-[#0c1322] border border-slate-800 rounded-2xl sm:rounded-3xl max-w-2xl w-full max-h-[90dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden">
-            
+
             {/* Sticky Header */}
             <div className="p-4 sm:p-5 border-b border-slate-800/80 flex items-center justify-between shrink-0 bg-[#0c1322] sticky top-0 z-10">
               <div>
@@ -2543,20 +2362,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
                 Dispatched: {selectedLeadForReport.audit?.sent_at ? new Date(selectedLeadForReport.audit.sent_at).toLocaleString() : 'Pending Review'}
               </div>
               <div className="flex items-center gap-2">
-                {selectedLeadForReport.lead?.status !== 'SENT' && (
-                  <button
-                    onClick={() => {
-                      const leadIdToRun = selectedLeadForReport.lead?.id;
-                      setSelectedLeadForReport(null);
-                      if (leadIdToRun) handleProcessNext(leadIdToRun);
-                    }}
-                    disabled={isProcessing}
-                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 disabled:opacity-40 text-white rounded-xl text-xs font-semibold shadow-lg shadow-cyan-500/20 transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Send Cold Email Now</span>
-                  </button>
-                )}
+                <LeadDemoActions lead={selectedLeadForReport.lead} onRefresh={fetchDashboardData} />
                 <button
                   onClick={() => setSelectedLeadForReport(null)}
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
@@ -2573,7 +2379,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
       {pipelineMonitor && pipelineMonitor.show && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-[#0c1322] border border-slate-800 rounded-2xl sm:rounded-3xl max-w-xl w-full max-h-[90dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden">
-            
+
             {/* Top Glowing Ambient Line */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-emerald-400 z-20" />
 
@@ -2821,7 +2627,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
       {showSeoLabModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-[#0c1322] border border-cyan-500/40 rounded-2xl sm:rounded-3xl max-w-3xl w-full max-h-[92dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden">
-            
+
             {/* Top Glowing Ambient Line */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 z-20" />
 
@@ -2854,7 +2660,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
 
             {/* Scrollable Modal Content */}
             <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 text-xs select-text">
-              
+
               {/* URL & Business Input Controls */}
               <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
@@ -2939,10 +2745,10 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
               {/* 4-Pillar Results Dashboard */}
               {seoLabResult && (
                 <div className="space-y-4 animate-fadeIn">
-                  
+
                   {/* Top 4-Pillar Score Cards Grid */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    
+
                     {/* Pillar 1: PageSpeed & CWV */}
                     <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5 text-center">
                       <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center justify-center gap-1">
@@ -3018,7 +2824,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
 
                   {/* Detected Issues & Actionable Fixes */}
                   <div className="grid md:grid-cols-2 gap-3">
-                    
+
                     {/* Issues List */}
                     <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
                       <div className="text-[10px] uppercase font-bold tracking-wider text-rose-400 flex items-center gap-1.5">
@@ -3087,7 +2893,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
       {selectedCrmLead && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-fadeIn">
           <div className="bg-[#0b111e] border border-slate-700/80 rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[92dvh] my-auto flex flex-col shadow-2xl relative overflow-hidden ring-1 ring-cyan-500/20">
-            
+
             {/* Drawer Top Header */}
             <div className="p-4 sm:p-5 border-b border-slate-800 bg-[#0e1627] flex items-center justify-between shrink-0 sticky top-0 z-10">
               <div className="flex items-center gap-3">
@@ -3123,10 +2929,10 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
 
             {/* Split Workspace Body */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 select-text">
-              
+
               {/* Left Column (7 Cols): 1-Tap Outreach & Activity Timeline */}
               <div className="lg:col-span-7 space-y-6">
-                
+
                 {/* 1-Tap Fast Outreach Bar */}
                 <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-4 space-y-3 shadow-inner">
                   <div className="flex items-center justify-between">
@@ -3159,15 +2965,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
                         <span>Direct Call</span>
                       </a>
                     )}
-                    <Link
-                      href={`/demo/${selectedCrmLead.business_slug || (selectedCrmLead.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
-                      target="_blank"
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Live Demo Prototype</span>
-                      <ExternalLink className="w-3 h-3 ml-0.5" />
-                    </Link>
+                    <LeadDemoActions lead={selectedCrmLead} onRefresh={fetchDashboardData} />
                   </div>
                 </div>
 
@@ -3307,7 +3105,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users (email);`}
 
               {/* Right Column (5 Cols): Twenty CRM Properties & Deal Closer */}
               <div className="lg:col-span-5 space-y-5">
-                
+
                 <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 space-y-4 shadow-inner">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">

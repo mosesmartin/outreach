@@ -1,5 +1,100 @@
 # 🏢 SynergyTech Solutions: B2B Cold Outreach & Acquisition Engine
 
+## Current outreach workflow: manual demo, review, then send
+
+Business discovery/import saves contacts only. Each lead has a **Generate demo**
+button, which saves a draft in `audit_reports` and does not send email. Open the
+generated concept, check the business's services and verify the recipient, then
+check the review box and click **Send reviewed email**. Existing tables are reused;
+this workflow needs no additional SQL migration.
+
+- No simulated business quota filling, guessed `contact@` addresses or invented
+  Gmail contacts. Empty and partial provider batches remain empty/partial. Missing
+  email, ratings and services stay missing. Real numeric email usernames are kept.
+- Exact historical simulation fingerprints are blocked. Original contact fields
+  and sent history are retained for audit. `scripts/quarantine-synthetic-leads.cjs`
+  previews matches; `--apply` changes only queue status and a quarantine note.
+  Placeholder-only email fields do not invalidate a real phone/business lead, but
+  they cannot be used for email outreach.
+- Public demo pages require a saved draft UUID and a matching lead fingerprint.
+  Plain slug URLs and unknown businesses no longer manufacture mock demos.
+  Changes to the recipient/services invalidate older drafts. Demos use concept
+  labels and sample enquiry interactions, with no fabricated reviews, performance
+  scores, guarantees or actual customer submissions.
+- Legacy process/SSE endpoints return 410; cron and direct MCP SMTP dispatch do
+  not send invitations. Only the authenticated reviewed-send action can send a
+  lead invitation. A database claim prevents sending one draft twice. Missing SMTP
+  fails explicitly; MX checking does not prove mailbox ownership or inbox delivery.
+  Sending also checks that the public demo URL serves the current preview version;
+  an old deployment, unavailable preview or invalidated link blocks dispatch.
+- Changes must be deployed to update an already hosted site. Local validation does
+  not change the hosted application's code. Historical quarantine updates are live
+  database changes; they never delete records or clear their contact fields.
+
+Run `npm run test:outreach` for contact, demo, approval and duplicate-send checks.
+Earlier automated-pipeline descriptions below describe the previous implementation.
+
+## Website Requests (Google buyer-request discovery)
+
+Open `/website-requests` from the dashboard's **Website Requests** link. Each saved
+request has a private detail page with its original post, publication evidence,
+public contact details (when present), outreach status and notes.
+
+One-time setup: run [`supabase/website_requests.sql`](./supabase/website_requests.sql)
+in the Supabase SQL Editor. The migration is re-runnable, adds separate private
+tables, and leaves existing leads unchanged. No anonymous read access is granted.
+The page's **Copy setup SQL** / **Open SQL Editor** buttons provide the same setup.
+Supabase URL, anon key and service role key are Data API credentials; they are not
+a direct PostgreSQL connection or a Management API personal access token, so they
+cannot apply this DDL migration through the app's existing REST client.
+This feature requires the server's `SUPABASE_SERVICE_ROLE_KEY` and existing
+`DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` (or `DATAFORSEO_API_KEY=login:password`).
+Credentials stay on the server. Missing setup produces an actionable error;
+requests are never silently saved to local JSON.
+
+- **Today** is the default; **Last 3 days** and **Last 7 days** include that many
+  calendar days in `Asia/Karachi` (UTC+05:00). Saved results are filtered again on
+  every read; edited or rediscovered posts retain their earliest publication date.
+- Each user-triggered search makes two paid DataForSEO Google Organic queries,
+  at depth 10, and inspects up to 12 deduplicated original posts. A database-backed
+  60-second cooldown prevents overlapping searches per admin. Refreshing saved
+  requests never triggers a paid search.
+- Google date filters are a discovery hint. A request is only saved after an
+  original post supplies an absolute, timezone-aware publication timestamp
+  (structured metadata, `article:published_time`, or Reddit submission `created_utc`).
+  Search snippets, modification dates, comment dates and discovery time are not
+  publication evidence. Date-only/undated posts, closed requests, seller ads,
+  employment ads and inaccessible sources are excluded. Zero results remain zero.
+  Discovery uses a rolling Google day/week filter; the exact selected Karachi
+  calendar range is checked against the original date. Google result redirect
+  wrappers are resolved only to supported public post URLs.
+- Supported public individual posts: Reddit, LinkedIn, Facebook, X, Upwork and
+  Freelancer. Login walls and private groups are not bypassed. Google does not
+  index every post, and some platforms restrict public access, so coverage is
+  intentionally incomplete. Basic phrase matching can miss requests or require
+  manual review. A verified recent publication does not prove the job is still open.
+- **Check source again** refreshes source availability without changing the original
+  date or outreach notes. Requests that fail rechecking leave the fresh list.
+  Contact fields only show details found in the original post; otherwise use its
+  native reply/DM/proposal option. Messages are never sent automatically.
+- **USA clients only:** US/English Google results and US query terms narrow discovery.
+  Before saving, the original requester must declare a US location in their post
+  (for example, "My business is based in Austin, Texas") or in structured requester/
+  organization address metadata. Currency, +1 phone numbers, a US search region,
+  job applicant restrictions, and a US target audience do not prove client location.
+  Non-US, conflicting and unknown locations are excluded. This is source-declared
+  location evidence, not independent identity/residency verification. Conservative
+  matching misses clients who do not publish an unambiguous location.
+  The optional city/state input narrows US discovery further; it never overrides
+  the required source evidence. Historical records without evidence are not relabeled.
+
+Run `npm run test:requests` for freshness/source/provider regression checks and
+`npm run build` for the production build. `node scripts/check-request-storage.cjs`
+performs a read-only storage readiness check without printing credentials.
+
+Provider reference: [DataForSEO Google Organic API](https://docs.dataforseo.com/v3/serp/google/organic/live/advanced/)
+and [Google date parameters](https://dataforseo.com/help-center/google-search-engine-parameters-and-how-to-use-them).
+
 > **Brand**: SynergyTech Solutions (`synergytechsol.com`)  
 > **Sender Identity**: `mosesmartin@synergytechsol.com`  
 > **Architecture**: Automated Next.js 14+ (App Router) + Supabase (PostgreSQL) + Google Gemini 1.5 Flash + Google PageSpeed Insights API + Cheerio SEO Scanner + Nodemailer + Vercel Cron.

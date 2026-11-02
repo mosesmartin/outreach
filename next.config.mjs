@@ -5,6 +5,7 @@ const nextConfig = {
     serverComponentsExternalPackages: ['pdfkit'],
     outputFileTracingIncludes: {
       '/**': ['./node_modules/pdfkit/**/*'],
+      '/api/website-requests/setup': ['./supabase/website_requests.sql'],
     },
   },
 };

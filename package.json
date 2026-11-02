@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test:requests": "node --test tests/website-requests.test.mjs",
+    "test:outreach": "node --test tests/manual-demo.test.mjs",
     "lint": "next lint"
   },
   "dependencies": {

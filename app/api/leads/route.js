@@ -1,3 +1,6 @@
+import { requestAccess } from '@/lib/websiteRequestAccess';
+import { leadContactSafety, syntheticLeadReason } from '@/lib/leadSafety.mjs';
+import { currentDemoDraft } from '@/lib/manualDemo.mjs';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug';
@@ -89,25 +92,12 @@ function normalizeLeadInput(raw, filterNoWebsite = true) {
   } else if (typeof raw.category === 'string' && raw.category.trim()) {
     services = raw.category.split(',').map((s) => s.trim()).filter(Boolean);
   }
-  if (services.length === 0) {
-    services = [
-      `${category} Diagnostic & Service`,
-      'Upfront Transparent Pricing',
-      'Verified 5-Star Craftsmanship',
-      'Direct Local Priority Booking',
-    ];
-  }
-
-  const rating = parseFloat(raw.rating || raw.review_rating || raw.stars || raw.total_score || '4.9') || 4.9;
-  const reviewCount = parseInt(raw.review_count || raw.reviews_count || raw.reviews || raw.user_ratings_total || '45', 10) || 45;
-  const description = raw.description || raw.about || raw.services_description || `Premier ${category} specialists serving ${city}.`;
+  const rating = Number.parseFloat(raw.rating || raw.review_rating || raw.stars || raw.total_score) || null;
+  const reviewCount = Number.parseInt(raw.review_count || raw.reviews_count || raw.reviews || raw.user_ratings_total, 10) || null;
+  const description = raw.description || raw.about || raw.services_description || '';
 
   const initialStatus = raw.status || 'PENDING';
-  const initialReason = raw.status_reason || (
-    phone 
-      ? `No Website • Verified Phone: ${phone} (Live Prototype ready at /demo/${businessSlug})`
-      : `No Website • Prototype ready at /demo/${businessSlug}`
-  );
+  const initialReason = `Imported contact; business/email ownership needs review. Demo not generated.${phone ? ` Phone: ${phone}` : ''}`;
 
   const stage = raw.stage || (
     initialStatus === 'SENT' ? 'CONTACTED' :
@@ -115,14 +105,14 @@ function normalizeLeadInput(raw, filterNoWebsite = true) {
     initialStatus === 'SKIPPED' ? 'LOST' :
     'NEW_LEAD'
   );
-  const dealValue = parseFloat(raw.deal_value || raw.dealValue || 500) || 500;
-  const retainerValue = parseFloat(raw.retainer_value || raw.retainerValue || 75) || 75;
+  const dealValue = parseFloat(raw.deal_value || raw.dealValue || 0) || 0;
+  const retainerValue = parseFloat(raw.retainer_value || raw.retainerValue || 0) || 0;
   const priority = raw.priority || 'MEDIUM';
   const followUpDate = raw.follow_up_date || raw.followUpDate || null;
   const notes = Array.isArray(raw.notes) ? raw.notes : [
     {
       id: `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      text: `Imported Lead (No Website). Services: ${services.slice(0, 3).join(', ')}. Live mobile prototype generated at /demo/${businessSlug}.`,
+      text: `Imported Lead (No Website). Services: ${services.slice(0, 3).join(', ')}. Demo not generated.`,
       createdAt: new Date().toISOString(),
       author: 'CRM Importer',
     }
@@ -136,8 +126,8 @@ function normalizeLeadInput(raw, filterNoWebsite = true) {
     email: cleanEmail || null,
     phone: phone ? String(phone).trim() : null,
     address,
-    website_url: null,
-    has_website: false,
+    website_url: hasWebsite ? rawWebsite : null,
+    has_website: hasWebsite,
     category,
     city,
     services,
@@ -160,10 +150,13 @@ function normalizeLeadInput(raw, filterNoWebsite = true) {
  * GET /api/leads - Fetch leads list
  */
 export async function GET(req) {
+  const access = requestAccess(req, false); if (access.error) return access.error;
   const fallbackList = loadFallbackLeads();
 
   const enrichWithCrmFields = (lead) => {
     if (!lead) return lead;
+    const draft = currentDemoDraft(lead);
+    const contactSafety = leadContactSafety(lead);
     const phone = lead.phone || extractPhoneFallback(lead.status_reason) || null;
     const stage = lead.stage || (
       lead.status === 'SENT' ? 'CONTACTED' :
@@ -179,7 +172,10 @@ export async function GET(req) {
 
     return {
       ...lead,
-      phone,
+      demo: draft,
+      contact_safety: contactSafety,
+      email: contactSafety.emailBlocked ? null : lead.email,
+      phone: contactSafety.blocked ? null : phone,
       stage,
       deal_value: dealValue,
       retainer_value: retainerValue,
@@ -253,6 +249,7 @@ export async function GET(req) {
  * POST /api/leads - Ingest leads (JSON Single / Array / CSV)
  */
 export async function POST(req) {
+  const access = requestAccess(req, true); if (access.error) return access.error;
   try {
     const contentType = req.headers.get('content-type') || '';
     let rawItems = [];
@@ -290,6 +287,7 @@ export async function POST(req) {
         skippedWithWebsite++;
         continue;
       }
+      if (syntheticLeadReason(parsed)) continue;
       if (parsed.business_name && parsed.business_name !== 'Unnamed Business') {
         validLeads.push(parsed);
       }
@@ -317,7 +315,7 @@ export async function POST(req) {
           const { id, ...rest } = l;
           return {
             ...rest,
-            email: rest.email || `${rest.business_slug}@leads.synergytechsol.com`,
+            email: rest.email || '', // Unknown on legacy NOT NULL schema; never invent a mailbox.
           };
         });
 
@@ -392,6 +390,7 @@ export async function POST(req) {
  * PATCH /api/leads - Twenty CRM Update Engine (Stage, Deal Value, Notes, Priority, Follow-Up)
  */
 export async function PATCH(req) {
+  const access = requestAccess(req, true); if (access.error) return access.error;
   try {
     const body = await req.json();
     const leadId = body.id;
@@ -502,6 +501,7 @@ export async function PATCH(req) {
  * DELETE /api/leads - Wipes all leads & audit reports for a fresh start
  */
 export async function DELETE(req) {
+  const access = requestAccess(req, true); if (access.error) return access.error;
   try {
     // 1. Clear fallback local JSON
     saveFallbackLeads([]);

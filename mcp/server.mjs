@@ -84,7 +84,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'enrich_decision_maker',
         description:
-          'Crawls a target company domain to extract Founder/CEO/Owner names, synthesizes corporate email permutations, and verifies live DNS MX inbox deliverability.',
+          'Crawls a target company domain to extract Founder/CEO/Owner names, returns only contacts actually found in source pages.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -292,58 +292,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Tool 3: generate_prototype_template
       // ----------------------------------------------------------------------
       case 'generate_prototype_template': {
-        const { businessName, category, city, services, phone } = args;
-        const slug = generateSlug(businessName);
-
-        const leadData = {
-          business_name: businessName,
-          business_slug: slug,
-          owner_name: 'Leadership Team',
-          email: `contact@${slug}.com`,
-          has_website: false,
-          category: category || 'Home & Commercial Services',
-          city: city || 'Metro Area',
-          services: services || ['Emergency Rapid Response', 'Free On-Site Estimates', 'Certified Specialists'],
-          rating: 4.9,
-          review_count: 52,
-          status: 'PENDING',
-          status_reason: 'Live prototype mounted via MCP Server',
-        };
-
-        try {
-          if (isSupabaseConfigured) {
-            const supabase = getSupabaseAdmin();
-            await supabase.from('leads').upsert(leadData, { onConflict: 'business_slug' });
-          }
-        } catch (dbErr) {
-          console.warn('[MCP Prototype DB Notice]:', dbErr.message);
-        }
-
-        const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://synergytechsol.com').replace(/\/$/, '');
-        const demoUrl = `${appBaseUrl}/demo/${slug}`;
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  status: 'success',
-                  businessName,
-                  slug,
-                  prototypeUrl: demoUrl,
-                  features: [
-                    '0.8s mobile load time',
-                    'Direct 1-tap quote capture form',
-                    'Google 5-star review showcase',
-                  ],
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return { isError: true, content: [{ type: 'text', text: 'Automatic placeholder leads were removed. Save real business details, then use the dashboard Generate demo button.' }] };
       }
 
       // ----------------------------------------------------------------------
@@ -395,85 +344,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Tool 5: dispatch_client_outreach
       // ----------------------------------------------------------------------
       case 'dispatch_client_outreach': {
-        const { to, funnel, leadData, auditData, attachPdf } = args;
-
-        let emailContent = null;
-        let attachments = [];
-
-        if (funnel === 'FUNNEL_A_AUDIT') {
-          emailContent = buildFunnelAEmail({
-            ownerName: leadData.ownerName,
-            businessName: leadData.businessName,
-            speedScore: auditData?.speedScore || 48,
-            lcpSeconds: auditData?.lcpSeconds || '3.9s',
-            pageSizeMb: auditData?.pageSizeMb || '3.2',
-            seoScore: auditData?.seoScore || 52,
-            schemaScore: auditData?.schemaScore || 40,
-            conversionScore: auditData?.conversionScore || 45,
-            seoIssues: auditData?.seoIssues || [],
-            geminiHook: auditData?.geminiHook,
-            city: leadData.city,
-            category: leadData.category,
-          });
-
-          if (attachPdf) {
-            const pdfBuffer = await generateAuditPdf({
-              businessName: leadData.businessName,
-              websiteUrl: leadData.websiteUrl || `https://${leadData.domain || 'example.com'}`,
-              speedScore: auditData?.speedScore || 48,
-              lcpSeconds: auditData?.lcpSeconds || '3.9s',
-              pageSizeMb: auditData?.pageSizeMb || '3.2',
-              seoScore: auditData?.seoScore || 52,
-              schemaScore: auditData?.schemaScore || 40,
-              conversionScore: auditData?.conversionScore || 45,
-              seoIssues: auditData?.seoIssues || [],
-              geminiHook: auditData?.geminiHook,
-              ownerName: leadData.ownerName,
-            });
-
-            attachments.push({
-              filename: `Executive-Diagnostic-${leadData.businessName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
-              content: pdfBuffer,
-              contentType: 'application/pdf',
-            });
-          }
-        } else {
-          emailContent = buildFunnelBEmail({
-            ownerName: leadData.ownerName,
-            businessName: leadData.businessName,
-            category: leadData.category,
-            city: leadData.city,
-            businessSlug: leadData.businessSlug || generateSlug(leadData.businessName),
-          });
-        }
-
-        const dispatchResult = await sendColdEmail({
-          to,
-          subject: emailContent.subject,
-          body: emailContent.body,
-          attachments,
-        });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  status: dispatchResult.success ? 'success' : 'failed',
-                  recipient: to,
-                  simulated: dispatchResult.simulated,
-                  subject: emailContent.subject,
-                  hasPdfAttachment: attachments.length > 0,
-                  messageId: dispatchResult.messageId,
-                  bodyPreview: emailContent.body.split('\n').slice(0, 6).join('\n'),
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        return { isError: true, content: [{ type: 'text', text: 'Direct SMTP dispatch is disabled. Generate and review a saved lead demo in the dashboard, then explicitly send the reviewed invitation.' }] };
       }
 
       // ----------------------------------------------------------------------
