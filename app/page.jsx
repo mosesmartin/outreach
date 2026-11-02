@@ -188,6 +188,7 @@ export default function OutreachDashboard() {
 
   // Discovery Form State
   const [discoveryMode, setDiscoveryMode] = useState('APOLLO_DECISION_MAKERS');
+  const [discoveryFilterMode, setDiscoveryFilterMode] = useState('HYBRID'); // 'HYBRID', 'WEBSITE_REDESIGN', 'NO_WEBSITE_ONLY'
   const [discoveryNiche, setDiscoveryNiche] = useState('Roofing Contractors');
   const [discoveryLocation, setDiscoveryLocation] = useState('Miami, FL');
   const [discoveryMaxLeads, setDiscoveryMaxLeads] = useState(50);
@@ -723,7 +724,8 @@ export default function OutreachDashboard() {
               niche: discoveryNiche,
               location: discoveryLocation,
               maxLeads: discoveryMaxLeads,
-              mode: discoveryMode,
+              filterMode: discoveryFilterMode,
+              mode: discoveryFilterMode,
             };
 
       const res = await fetch('/api/leads/discover', {
@@ -744,9 +746,21 @@ export default function OutreachDashboard() {
           setSingleDomainUrl('');
           setSingleBusinessName('');
         } else {
+          const emailInfo = data.withEmailCount ? `${data.withEmailCount} Email Inboxes` : '';
+          const phoneInfo = data.withPhoneCount ? `${data.withPhoneCount} WhatsApp Phones` : '';
+          const contactStats = [emailInfo, phoneInfo].filter(Boolean).join(' • ');
+
+          let successMsg = `Successfully acquired ${data.totalSaved} verified leads for "${discoveryNiche}" in ${discoveryLocation}!`;
+          if (contactStats) {
+            successMsg += ` (${contactStats})`;
+          }
+          if (data.filterMode === 'NO_WEBSITE_ONLY' && data.skippedWithWebsite) {
+            successMsg += ` [${data.skippedWithWebsite} existing websites filtered out]`;
+          }
+
           setDiscoveryStatus({
             type: 'success',
-            message: `Discovered & Filtered ${data.totalSaved} businesses WITHOUT websites on "${discoveryNiche}" in ${discoveryLocation} (${data.skippedWithWebsite || 0} existing websites filtered out).`,
+            message: successMsg,
             isSimulated: data.isSimulated,
           });
         }
@@ -995,19 +1009,19 @@ export default function OutreachDashboard() {
                   <Zap className="w-3.5 h-3.5 text-cyan-400" />
                   <span>1-Click Autonomous Lead Hunter</span>
                   <span className="text-slate-500">•</span>
-                  <span className="text-emerald-400 font-semibold">Strict No-Website Filter ACTIVE</span>
+                  <span className="text-emerald-400 font-semibold">360° Omnichannel Engine ACTIVE</span>
                 </div>
                 <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
-                  Target Local Keyword & City • Single-Click Lead Acquisition
+                  Target Local Keyword & City • Multi-District Lead & Contact Extraction
                 </h3>
                 <p className="text-xs text-slate-400 max-w-2xl">
-                  Deep crawls Google Maps on your keyword, drops businesses with existing websites, and extracts verified Phone, exact Address, What Company Does (Services), and Google Stars directly into Twenty CRM with live mobile prototypes.
+                  Crawls Google Maps across multi-district queries with automated website contact crawling. Extracts verified Company Emails (for Cold SMTP), Phones (WhatsApp), Physical Addresses, Services, and Google Stars with live mobile prototypes at <code className="text-cyan-300 font-mono">/demo/[slug]</code>.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-[11px] font-mono px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-bold flex items-center gap-1.5 shadow-inner">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> 100% Zero-Website Guaranteed
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> 100% Target Quota Guaranteed
                 </span>
               </div>
             </div>
@@ -1015,14 +1029,14 @@ export default function OutreachDashboard() {
             {/* Single-Click Command Bar Input Form */}
             <form onSubmit={handleDiscoverLeads} className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
               {/* Niche / Keyword */}
-              <div className="md:col-span-4">
+              <div className="md:col-span-3">
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                   1. Business Keyword / Niche
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Roofing Contractors or Emergency Plumbing"
+                  placeholder="e.g. Emergency Plumbing or Roofing Contractors"
                   value={discoveryNiche}
                   onChange={(e) => setDiscoveryNiche(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition font-medium"
@@ -1030,35 +1044,52 @@ export default function OutreachDashboard() {
               </div>
 
               {/* Location / City */}
-              <div className="md:col-span-4">
+              <div className="md:col-span-3">
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                   2. Target Location / City
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Austin, TX or Miami, FL or London"
+                  placeholder="e.g. Miami, FL or Austin, TX or London"
                   value={discoveryLocation}
                   onChange={(e) => setDiscoveryLocation(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition font-medium"
                 />
               </div>
 
+              {/* Outreach Channel & Filter Mode */}
+              <div className="md:col-span-3">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-cyan-400 mb-1.5 flex items-center justify-between">
+                  <span>3. Outreach Channel</span>
+                  <span className="text-[9px] text-emerald-400 font-normal">Emails + Phones</span>
+                </label>
+                <select
+                  value={discoveryFilterMode}
+                  onChange={(e) => setDiscoveryFilterMode(e.target.value)}
+                  className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-3 py-2.5 text-xs text-white font-semibold focus:outline-none focus:border-cyan-400 transition cursor-pointer"
+                >
+                  <option value="HYBRID">🌟 Hybrid 360° (Emails + WhatsApp) [Best]</option>
+                  <option value="WEBSITE_REDESIGN">🚀 Website Redesign (Cold Email Inboxes)</option>
+                  <option value="NO_WEBSITE_ONLY">📱 Zero-Website (WhatsApp & Calls Only)</option>
+                </select>
+              </div>
+
               {/* Target Leads Count */}
-              <div className="md:col-span-2">
+              <div className="md:col-span-1">
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                  3. Volume Batch
+                  4. Batch
                 </label>
                 <select
                   value={discoveryMaxLeads}
                   onChange={(e) => setDiscoveryMaxLeads(parseInt(e.target.value, 10))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white font-mono font-bold focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2.5 text-xs text-white font-mono font-bold focus:outline-none focus:border-cyan-500 transition cursor-pointer"
                 >
-                  <option value="50">50 Leads</option>
-                  <option value="100">100 Leads</option>
-                  <option value="200">200 Leads</option>
-                  <option value="300">300 Leads</option>
-                  <option value="500">500 Leads (Deep)</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                  <option value="300">300</option>
+                  <option value="500">500</option>
                 </select>
               </div>
 
@@ -1888,9 +1919,24 @@ export default function OutreachDashboard() {
                     </div>
 
                     <div>
+                      <label className="block text-slate-300 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
+                        Outreach Channel & Targeting Mode
+                      </label>
+                      <select
+                        value={discoveryFilterMode}
+                        onChange={(e) => setDiscoveryFilterMode(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-semibold focus:outline-none focus:border-cyan-500 transition cursor-pointer"
+                      >
+                        <option value="HYBRID">🌟 Hybrid 360° (Company Emails for SMTP + WhatsApp Phones) [Recommended]</option>
+                        <option value="WEBSITE_REDESIGN">🚀 Website Redesign (Extract Verified Inboxes & PageSpeed Audits)</option>
+                        <option value="NO_WEBSITE_ONLY">📱 Zero-Website (WhatsApp & Direct Phone Pitching Only)</option>
+                      </select>
+                    </div>
+
+                    <div>
                       <div className="flex justify-between items-center mb-1.5">
                         <label className="block text-slate-300 font-semibold uppercase tracking-wider text-[10px]">
-                          Target No-Website Leads (Deep Bulk Scraping)
+                          Target Leads Batch Quota (Deep Bulk Scraping)
                         </label>
                         <span className="text-cyan-400 font-mono font-bold text-xs">{discoveryMaxLeads} Leads Target</span>
                       </div>
@@ -1930,26 +1976,26 @@ export default function OutreachDashboard() {
                       </div>
                     </div>
 
-                {/* Strict No-Website Extraction Architecture */}
+                {/* 360° Omnichannel Extraction Architecture */}
                 <div className="bg-slate-950/60 border border-cyan-500/20 rounded-xl p-3 space-y-2 text-[11px] text-slate-400">
                   <div className="text-cyan-300 font-semibold flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Strict No-Website Acquisition Engine:
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> 360° Omnichannel Acquisition Engine:
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Crawls Google Maps deeply on <strong className="text-white">"{discoveryNiche || 'Keyword'}"</strong>. Every business that already has a website is automatically filtered out. For each genuine target, extracts <strong className="text-slate-200">Phone, exact Address, What Company Does (Services), and Google Stars</strong> for instant demo generation.
+                    Crawls Google Maps across multi-district queries on <strong className="text-white">"{discoveryNiche || 'Keyword'}"</strong>. Automatically visits websites to crawl verified company inboxes (<code className="text-cyan-300 font-mono">contact@, owner@</code>) for cold email campaigns, and extracts phone numbers for WhatsApp pitching with live demo prototypes.
                   </p>
                   <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[10px] text-slate-400">
                     <div className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> Deep Places Crawl
+                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> Multi-District Crawl
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> 100% No-Website Filter
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Verified Email Inboxes
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> Services & Category Extraction
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> Verified Phone & WhatsApp
+                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> 100% Target Quota Guaranteed
                     </div>
                   </div>
                 </div>

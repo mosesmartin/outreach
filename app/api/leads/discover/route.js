@@ -19,7 +19,7 @@ export async function POST(req) {
     }
 
     const body = await req.json();
-    const { niche, location, maxLeads } = body;
+    const { niche, location, maxLeads, filterMode, mode } = body;
 
     if (!niche || !location) {
       return NextResponse.json(
@@ -32,6 +32,7 @@ export async function POST(req) {
       niche,
       location,
       maxLeads: parseInt(maxLeads || '50', 10),
+      filterMode: filterMode || mode || 'HYBRID',
     });
 
     return NextResponse.json(result);
