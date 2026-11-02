@@ -188,7 +188,7 @@ export default function OutreachDashboard() {
 
   // Discovery Form State
   const [discoveryMode, setDiscoveryMode] = useState('APOLLO_DECISION_MAKERS');
-  const [discoveryFilterMode, setDiscoveryFilterMode] = useState('HYBRID'); // 'HYBRID', 'WEBSITE_REDESIGN', 'NO_WEBSITE_ONLY'
+  const [discoveryFilterMode, setDiscoveryFilterMode] = useState('NO_WEBSITE_ONLY'); // Strict: Drops all businesses that have websites
   const [discoveryNiche, setDiscoveryNiche] = useState('Roofing Contractors');
   const [discoveryLocation, setDiscoveryLocation] = useState('Miami, FL');
   const [discoveryMaxLeads, setDiscoveryMaxLeads] = useState(50);
@@ -1009,19 +1009,19 @@ export default function OutreachDashboard() {
                   <Zap className="w-3.5 h-3.5 text-cyan-400" />
                   <span>1-Click Autonomous Lead Hunter</span>
                   <span className="text-slate-500">•</span>
-                  <span className="text-emerald-400 font-semibold">360° Omnichannel Engine ACTIVE</span>
+                  <span className="text-emerald-400 font-semibold">100% Zero-Website Filter ACTIVE</span>
                 </div>
                 <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
-                  Target Local Keyword & City • Multi-District Lead & Contact Extraction
+                  Target Local Keyword & City • Strict Zero-Website Leads Scraping
                 </h3>
                 <p className="text-xs text-slate-400 max-w-2xl">
-                  Crawls Google Maps across multi-district queries with automated website contact crawling. Extracts verified Company Emails (for Cold SMTP), Phones (WhatsApp), Physical Addresses, Services, and Google Stars with live mobile prototypes at <code className="text-cyan-300 font-mono">/demo/[slug]</code>.
+                  Deep crawls Google Maps on your keyword, automatically drops every company that already has a website, and extracts only businesses WITHOUT websites with verified Phone numbers, exact Addresses, Services, and Google Stars.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-[11px] font-mono px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-bold flex items-center gap-1.5 shadow-inner">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> 100% Target Quota Guaranteed
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> 100% Zero-Website Guaranteed
                 </span>
               </div>
             </div>
@@ -1029,14 +1029,14 @@ export default function OutreachDashboard() {
             {/* Single-Click Command Bar Input Form */}
             <form onSubmit={handleDiscoverLeads} className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
               {/* Niche / Keyword */}
-              <div className="md:col-span-3">
+              <div className="md:col-span-5">
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                   1. Business Keyword / Niche
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Emergency Plumbing or Roofing Contractors"
+                  placeholder="e.g. Emergency Plumbing, Roofing Contractors, Dentists"
                   value={discoveryNiche}
                   onChange={(e) => setDiscoveryNiche(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition font-medium"
@@ -1044,7 +1044,7 @@ export default function OutreachDashboard() {
               </div>
 
               {/* Location / City */}
-              <div className="md:col-span-3">
+              <div className="md:col-span-4">
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                   2. Target Location / City
                 </label>
@@ -1058,27 +1058,10 @@ export default function OutreachDashboard() {
                 />
               </div>
 
-              {/* Outreach Channel & Filter Mode */}
-              <div className="md:col-span-3">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-cyan-400 mb-1.5 flex items-center justify-between">
-                  <span>3. Outreach Channel</span>
-                  <span className="text-[9px] text-emerald-400 font-normal">Emails + Phones</span>
-                </label>
-                <select
-                  value={discoveryFilterMode}
-                  onChange={(e) => setDiscoveryFilterMode(e.target.value)}
-                  className="w-full bg-slate-950 border border-cyan-500/40 rounded-xl px-3 py-2.5 text-xs text-white font-semibold focus:outline-none focus:border-cyan-400 transition cursor-pointer"
-                >
-                  <option value="HYBRID">🌟 Hybrid 360° (Emails + WhatsApp) [Best]</option>
-                  <option value="WEBSITE_REDESIGN">🚀 Website Redesign (Cold Email Inboxes)</option>
-                  <option value="NO_WEBSITE_ONLY">📱 Zero-Website (WhatsApp & Calls Only)</option>
-                </select>
-              </div>
-
               {/* Target Leads Count */}
               <div className="md:col-span-1">
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                  4. Batch
+                  3. Batch
                 </label>
                 <select
                   value={discoveryMaxLeads}
