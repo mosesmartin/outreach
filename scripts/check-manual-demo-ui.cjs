@@ -33,10 +33,16 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
   renderedModule.require = name => name.endsWith('.module.css') ? classNames : require(name);
   renderedModule._compile(compiled, filename);
   const { demoServices } = await import('../lib/leadServices.mjs');
+  const { requirementsFor, designFor } = await import('../tests/fixtures/demo-design.mjs');
   const corrected = demoServices({ category: 'Hair Salon', services: ['Emergency AC Repair & Recharge'] });
-  const markup = renderToString(React.createElement(renderedModule.exports.default, { initialLead: { ...fixture, services: corrected.services, services_suggested: corrected.suggested }, initialTheme: { buttonClass: 'bg-blue-600 text-white', accentText: 'text-cyan-300', gradientClass: 'from-blue-950 to-slate-900' } }));
+  const requirements = requirementsFor({ ...fixture, services: corrected.services });
+  const generatedDesign = designFor(requirements);
+  const markup = renderToString(React.createElement(renderedModule.exports.default, { initialLead: { ...fixture, services: corrected.services, services_suggested: corrected.suggested }, initialDesign: { requirements, design: generatedDesign } }));
   const css = (await fs.readdir(path.join(process.cwd(), '.next', 'static', 'css'))).filter(file => file.endsWith('.css')).map(file => `<link rel="stylesheet" href="${base}/_next/static/css/${file}">`).join('');
-  const demoHtml = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1">${css}<style>${componentCss}</style></head><body class="font-sans">${markup}</body></html>`;
+  const demoHtmlFor = brief => {
+    const content = renderToString(React.createElement(renderedModule.exports.default, { initialLead: { ...fixture, services: corrected.services, services_suggested: false }, initialDesign: { requirements: brief, design: designFor(brief) } }));
+    return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1">${css}<style>${componentCss}</style></head><body class="font-sans">${content}</body></html>`;
+  };
   const browser = spawn('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
     '--remote-debugging-port=9337', `--user-data-dir=${path.join(output, 'profile')}`, 'about:blank',
@@ -56,6 +62,7 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
     const runtimeErrors = [];
     let setupError = false;
     let searchCalls = 0;
+    let chatCalls = 0;
     let saveCalls = 0;
     let importCalls = 0;
     let importFails = true;
@@ -75,11 +82,13 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
       else if (message.method === 'Fetch.requestPaused') {
         const { requestId, request } = message.params;
         if (request.url.startsWith(base + '/demo/')) {
-          await send('Fetch.fulfillRequest', { requestId, responseCode: 200, responseHeaders: [{ name: 'Content-Type', value: 'text/html' }], body: Buffer.from(demoHtml).toString('base64') });
+          await send('Fetch.fulfillRequest', { requestId, responseCode: 200, responseHeaders: [{ name: 'Content-Type', value: 'text/html' }], body: Buffer.from(demoHtmlFor(fixture.demo?.requirements || requirements)).toString('base64') });
           return;
         }
         let payload;
         let status = 200;
+        let responseType = 'application/json';
+        const event = (type, data) => `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
         const url = new URL(request.url);
         if (url.pathname === '/api/auth/me') payload = { user: { name: 'QA Admin', role: 'ADMIN' } };
         else if (url.pathname === '/api/leads' && request.method === 'GET') {
@@ -102,7 +111,25 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
           }
         }
         else if (url.pathname === '/api/stats') payload = { configured: true, totalLeads: 2, pending: 1, blockedContacts: 1, prototypesReady: fixture.demo ? 1 : 0 };
-        else if (url.pathname.endsWith('/generate-demo')) { searchCalls++; fixture.demo = { ...draft }; payload = { success: true, emailSent: false, draft: fixture.demo }; }
+        else if (url.pathname.endsWith('/demo-session')) {
+          chatCalls++;
+          const sent = JSON.parse(request.postData);
+          assert.equal(sent.leadId, fixture.id);
+          assert.equal(sent.messages.at(-1).role, 'user');
+          const reply = chatCalls === 1 ? 'Who is the website for, and do you prefer a light or dark theme?' : 'The brief is complete. Review it, edit anything you need, then generate.';
+          responseType = 'text/event-stream';
+          payload = event('delta', { delta: reply.slice(0, 18) }) + event('delta', { delta: reply.slice(18) }) + event('complete', { reply, requirements: chatCalls === 1 ? { ...requirements, audience: '', theme: '' } : requirements, ready: chatCalls > 1 });
+        }
+        else if (url.pathname.endsWith('/generate-demo')) {
+          const sent = JSON.parse(request.postData);
+          assert.equal(sent.requirements.theme, 'light');
+          assert.equal(sent.requirements.layout, 'centered');
+          assert.ok(sent.requirements.goal.includes('appointments'));
+          assert.equal(chatCalls, 2, 'generation follows the requirements conversation');
+          searchCalls++; fixture.demo = { ...draft, requirements: sent.requirements };
+          responseType = 'text/event-stream';
+          payload = event('stage', { stage: 'designing' }) + event('delta', { delta: 'Creating the confirmed light, centered design.' }) + event('stage', { stage: 'saving' }) + event('complete', { success: true, emailSent: false, draft: fixture.demo });
+        }
         else if (url.pathname.endsWith('/send-reviewed')) {
           const approved = JSON.parse(request.postData);
           assert.equal(approved.reviewed, true);
@@ -110,7 +137,7 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
           saveCalls++; fixture.status = 'SENT'; fixture.demo.sent_at = new Date().toISOString();
           payload = { success: true, message: 'Test SMTP accepted reviewed invitation.' };
         } else { throw new Error('Unexpected API request: ' + url.pathname); }
-        await send('Fetch.fulfillRequest', { requestId, responseCode: status, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(JSON.stringify(payload)).toString('base64') });
+        await send('Fetch.fulfillRequest', { requestId, responseCode: status, responseHeaders: [{ name: 'Content-Type', value: responseType }], body: Buffer.from(responseType === 'text/event-stream' ? payload : JSON.stringify(payload)).toString('base64') });
       }
     });
     await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
@@ -124,8 +151,8 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
       console.error(JSON.stringify({ debug: await evaluate('document.body.innerText.slice(0,1800)'), runtimeErrors, screenshot: path.join(output, 'failed-ui.png') }));
       throw new Error(`UI condition failed: ${expression}`);
     };
-    const screenshot = async (name) => {
-      const image = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+    const screenshot = async (name, viewport = false) => {
+      const image = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: !viewport });
       await fs.writeFile(path.join(output, name), Buffer.from(image.data, 'base64'));
     };
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
@@ -135,8 +162,26 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].filter(button => button.textContent === 'Generate demo').length`), 1, 'blocked contact cannot generate a demo');
     await evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent === 'Generate demo').click()`);
     await waitFor(`Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'))`);
+    assert.equal(searchCalls, 0, 'opening requirements does not generate or pay for an AI turn');
+    assert.equal(await evaluate(`[...document.querySelectorAll('[role=dialog] button')].find(button=>button.textContent.includes('Generate from this brief')).disabled`), true);
+    await evaluate(`(() => {const input=document.querySelector('[id^="requirements-input-"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'A salon website for appointment enquiries. Ask what else you need.');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate(`document.querySelector('[role=dialog] form').requestSubmit()`);
+    await waitFor(`document.body.innerText.includes('Who is the website for')`);
+    assert.equal(searchCalls, 0);
+    assert.equal(await evaluate(`[...document.querySelectorAll('[role=dialog] button')].find(button=>button.textContent.includes('Generate from this brief')).disabled`), true, 'incomplete brief stays blocked');
+    await evaluate(`(() => {const input=document.querySelector('[id^="requirements-input-"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'Local salon customers, light theme and a centered layout.');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate(`document.querySelector('[role=dialog] form').requestSubmit()`);
+    await waitFor(`document.body.innerText.includes('The brief is complete')`);
+    await evaluate(`(() => {const input=document.querySelector('[role=dialog] aside textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'Help local customers enquire about appointments');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await screenshot('requirements-studio-desktop.png', true);
+    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await screenshot('requirements-studio-mobile.png', true);
+    assert.ok(await evaluate(`document.querySelector('[role=dialog] form').getBoundingClientRect().bottom <= document.querySelector('[role=dialog] aside').getBoundingClientRect().top`), 'mobile chat and brief do not overlap');
+    await evaluate(`[...document.querySelectorAll('[role=dialog] button')].find(button=>button.textContent.includes('Generate from this brief')).click()`);
+    await waitFor(`document.body.innerText.includes('Review before contact')`);
     assert.equal(searchCalls, 1); assert.equal(saveCalls, 0, 'generation never sends');
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent === 'Send reviewed email').disabled`), true);
+    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
     await screenshot('manual-review-desktop.png');
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await screenshot('manual-review-mobile.png');
@@ -174,12 +219,16 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
     assert.equal(saveCalls, 1, 'manual import never calls the send endpoint');
     await send('Page.navigate', { url: draft.prototype_url });
     await waitFor(`document.body.innerText.includes('Salon appointments')`);
+    assert.equal(await evaluate(`document.querySelector('h1').textContent`), generatedDesign.headline.join(''), 'saved AI copy replaces the keyword headline');
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('main > section[id]')].map(section=>section.id)`), ['home', ...requirements.sections], 'approved sections and order replace the full default template');
+    assert.equal(await evaluate(`document.querySelector('[data-layout]').getAttribute('data-layout')`), 'centered');
+    assert.equal(await evaluate(`document.querySelector('[data-appearance]').getAttribute('data-appearance')`), 'light');
     assert.equal(await evaluate(`/Furnace|Emergency AC|99\\/100|5-star/.test(document.body.innerText)`), false);
     await screenshot('salon-concept-mobile.png');
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
     await screenshot('salon-concept-desktop.png');
     assert.deepEqual(runtimeErrors, []);
-    console.log(JSON.stringify({ passed: true, checks: ['no automatic demo links', 'synthetic contact blocked', 'separate Generate demo button', 'generation sends no email', 'review checkbox required', 'only explicit send calls endpoint', 'desktop/mobile review dialog', 'manual save failure retains form', 'manual save appears after reload', 'duplicate submit prevented', 'filters cleared after save', 'failed refresh preserves existing leads', 'salon concept excludes HVAC and fabricated claims', 'no browser exceptions'], fixtureOnly: true, realEmailsSent: 0, screenshots: output }));
+    console.log(JSON.stringify({ passed: true, checks: ['no automatic demo links', 'synthetic contact blocked', 'separate Generate demo button', 'requirements conversation before generation', 'incomplete brief blocked', 'editable confirmed brief submitted', 'saved AI copy and sections rendered', 'generation sends no email', 'review checkbox required', 'only explicit send calls endpoint', 'desktop/mobile review dialog', 'manual save failure retains form', 'manual save appears after reload', 'duplicate submit prevented', 'filters cleared after save', 'failed refresh preserves existing leads', 'salon concept excludes HVAC and fabricated claims', 'no browser exceptions'], fixtureOnly: true, realEmailsSent: 0, screenshots: output }));
     await send('Browser.close');
   } finally { socket?.close(); browser.kill(); }
 })().catch((error) => { console.error(error.message); process.exitCode = 1; });

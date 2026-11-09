@@ -1,6 +1,7 @@
 import { requestAccess } from '@/lib/websiteRequestAccess';
 import { leadContactSafety, syntheticLeadReason } from '@/lib/leadSafety.mjs';
 import { currentDemoDraft } from '@/lib/manualDemo.mjs';
+import { publicDemoDraft } from '@/lib/demoRequirements.mjs';
 import { persistLeadImports, restoreImportedLead } from '@/lib/leadImport.mjs';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
@@ -173,7 +174,8 @@ export async function GET(req) {
 
     return {
       ...lead,
-      demo: draft,
+      demo: publicDemoDraft(draft),
+      audit_reports: (lead.audit_reports || []).map(publicDemoDraft),
       contact_safety: contactSafety,
       email: contactSafety.emailBlocked ? null : lead.email,
       phone: contactSafety.blocked ? null : phone,

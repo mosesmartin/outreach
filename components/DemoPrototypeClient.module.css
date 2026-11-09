@@ -458,3 +458,53 @@
   .builderContent h2 { font-size: 24px; }
 }
 @media (prefers-reduced-motion: reduce) { .root *, .root *::before, .root *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* Per-draft presentation choices from the confirmed requirements session. */
+.heroSummary { min-width: 0; padding: 36px; border: 1px solid #ffffff30; border-radius: 20px; background: #ffffff08; }
+.heroSummary > span { color: var(--hero-accent); font-family: 'Courier New', monospace; font-size: 12px; }
+.heroSummary h2 { margin-top: 24px; font-size: 36px; }
+.heroSummary > p { margin-block: 24px; color: var(--dark-muted); font-size: 15px; line-height: 27px; }
+.heroSummary > div { display: grid; gap: 12px; }
+.heroSummary a { display: flex; align-items: center; gap: 12px; padding-block: 14px; border-top: 1px solid #ffffff24; font-size: 13px; }
+.heroSummary a > svg:last-child { margin-left: auto; }
+.root[data-layout='centered'] .heroGrid { grid-template-columns: 1fr; gap: 48px; }
+.root[data-layout='centered'] .heroCopy { max-width: 920px; margin-inline: auto; text-align: center; }
+.root[data-layout='centered'] .hero h1 { max-width: 900px; }
+.root[data-layout='centered'] .heroDescription { margin-inline: auto; }
+.root[data-layout='centered'] .heroActions, .root[data-layout='centered'] .heroMeta, .root[data-layout='centered'] .eyebrow { justify-content: center; }
+.root[data-layout='centered'] .briefBuilder, .root[data-layout='centered'] .heroSummary { width: 100%; max-width: 760px; margin-inline: auto; }
+.root[data-layout='editorial'] .heroGrid { grid-template-columns: 1.25fr .75fr; gap: 48px; }
+.root[data-style='editorial'] h1, .root[data-style='editorial'] h2 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; letter-spacing: -.035em; }
+.root[data-style='clean'] h1 { font-weight: 600; }
+.root[data-style='friendly'] h1 { font-weight: 650; letter-spacing: -.025em; }
+.root[data-style='friendly'] .primaryAction, .root[data-style='friendly'] .serviceChoices > button { border-radius: 18px; }
+.root[data-motion='off'] *, .root[data-motion='off'] *::before, .root[data-motion='off'] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+.root[data-appearance='light'] { --dark: #f3f6fc; --dark-text: #17263e; --dark-muted: #52627c; }
+.root[data-appearance='light'] .hero { background-image: none; }
+.root[data-appearance='light'] .header { border-bottom-color: var(--line); }
+.root[data-appearance='light'] .brandMark, .root[data-appearance='dark'] .brandMark { background: var(--accent); }
+.root[data-appearance='light'] .eyebrow > span, .root[data-appearance='dark'] .eyebrow > span { background: var(--hero-accent); }
+.root[data-appearance='light'] .navigation > a:hover, .root[data-appearance='light'] .navigation > a[data-active='true'] { color: var(--accent); }
+.root[data-appearance='light'] .navAction { border: 1px solid var(--line); }
+.root[data-appearance='light'] .hero .primaryAction { background: var(--accent); color: white !important; }
+.root[data-appearance='light'] .hero .builderActions .primaryAction { background: var(--accent); }
+.root[data-appearance='light'] .hero h1 > span { background: none; -webkit-text-fill-color: var(--accent); color: var(--accent); }
+.root[data-appearance='light'] .capabilityStrip, .root[data-appearance='light'] .heroSummary, .root[data-appearance='light'] .heroSummary a { border-color: var(--line); }
+.root[data-appearance='light'] .heroSummary { background: white; }
+.root[data-appearance='light'] .secondaryAction { border-color: #b8c6de; }
+.root[data-appearance='light'] .menuToggle { color: var(--ink); border-color: #a4b4cd; }
+.root[data-appearance='light'] .processSection .sectionLabel, .root[data-appearance='light'] .processNumber { color: var(--accent); }
+.root[data-appearance='light'] .processNumber > span, .root[data-appearance='light'] .footerBottom { border-color: var(--line); background-color: transparent; }
+.root[data-appearance='light'] .workflowNode, .root[data-appearance='light'] .workflowBranches > span { color: var(--accent); border-color: #b7c5e1; }
+.root[data-appearance='dark'] { --ink: #e8eef9; --muted: #aab8ce; --line: #30405a; --soft: #101d31; --white: #0b1424; --dark: #060d1c; --dark-text: #f5f7ff; --dark-muted: #b5c2d8; }
+.root[data-appearance='dark'] .servicePanel, .root[data-appearance='dark'] .serviceChoices > button:not([aria-pressed='true']), .root[data-appearance='dark'] .form, .root[data-appearance='dark'] .emptyServices { background: #142238; }
+.root[data-appearance='dark'] .form input, .root[data-appearance='dark'] .form select, .root[data-appearance='dark'] .form textarea { background: #0a1526; color: #eaf1ff; border-color: #526681; }
+.root[data-appearance='dark'] .form input::placeholder, .root[data-appearance='dark'] .form textarea::placeholder { color: #9aabc4; }
+.root[data-appearance='dark'] .projectFilters > button { background: #15243b; }
+.root[data-appearance='dark'] .projectFilters > button[aria-pressed='true'] { background: var(--accent); }
+.root[data-appearance='dark'] .sectionLabel, .root[data-appearance='dark'] .textAction, .root[data-appearance='dark'] .aboutFacts a, .root[data-appearance='dark'] .conceptDetails, .root[data-appearance='dark'] .panelIndex { color: var(--hero-accent) !important; }
+.root[data-appearance='dark'] .briefBuilder { --ink: #132039; --muted: #586579; --line: #dfe5ee; --accent-light: #edf1ff; }
+.root[data-appearance='dark'] .projectDialog { background: #142238; }
+.root[data-appearance='dark'] .dialogHeader button { background: #1b2d49; color: #eef3ff; }
+@media(max-width:980px) { .root[data-layout='editorial'] .heroGrid { grid-template-columns: 1fr; } }
+@media(max-width:640px) { .heroSummary { padding: 24px; border-radius: 14px; } .heroSummary h2 { font-size: 30px; } }

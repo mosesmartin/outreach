@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ExternalLink, Loader2, Send, Sparkles, X } from 'lucide-react';
+import DemoRequirementsStudio from './DemoRequirementsStudio';
 
 const button = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -9,6 +10,7 @@ export default function LeadDemoActions({ lead, onRefresh }) {
   const [draft, setDraft] = useState(lead.demo || null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -34,14 +36,8 @@ export default function LeadDemoActions({ lead, onRefresh }) {
     return () => { document.removeEventListener('keydown', handle); document.body.style.overflow = overflow; before?.focus(); };
   }, [open, busy]);
 
-  async function generate(event) {
-    event.stopPropagation(); setBusy(true); setError(''); setNotice(''); setReviewed(false);
-    try {
-      const response = await fetch('/api/leads/generate-demo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: lead.id }) });
-      const result = await response.json(); if (!response.ok) throw new Error(result.error);
-      setDraft(result.draft); setOpen(true); setNotice('Demo prepared. No email was sent.');
-    } catch (failure) { setError(failure.message); }
-    finally { setBusy(false); }
+  function generate(event) {
+    event.stopPropagation(); setError(''); setNotice(''); setReviewed(false); setStudioOpen(true);
   }
   async function send() {
     setBusy(true); setError(''); setNotice('');
@@ -56,10 +52,11 @@ export default function LeadDemoActions({ lead, onRefresh }) {
   if (lead.contact_safety?.blocked) return <p className="max-w-sm rounded-lg border border-rose-500/40 bg-rose-950/30 p-3 text-xs leading-5 text-rose-200" role="status">{lead.contact_safety.reason}</p>;
   return <div className="space-y-2" onClick={event => event.stopPropagation()}>
     <div className="flex flex-wrap gap-2">
-      <button ref={trigger} type="button" onClick={generate} disabled={busy} className={button}>{busy ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}{draft ? 'Regenerate demo' : 'Generate demo'}</button>
+      <button ref={trigger} type="button" onClick={generate} disabled={busy || studioOpen} className={button}>{busy ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}{draft ? 'Regenerate demo' : 'Generate demo'}</button>
       {draft && <button type="button" className={button} onClick={() => { setOpen(true); setReviewed(false); }}>Review demo & email</button>}
     </div>
-    {!draft && <p className="text-[11px] text-slate-400">Demo not generated. No invitation will be sent automatically.</p>}
+    {!draft && <p className="text-[11px] text-slate-400">Discuss requirements first, then generate your demo. No invitation is sent automatically.</p>}
+    <DemoRequirementsStudio open={studioOpen} lead={lead} initialRequirements={draft?.requirements} onClose={() => setStudioOpen(false)} onGenerated={result => { setDraft(result.draft); setStudioOpen(false); setOpen(true); setNotice('Demo generated from your confirmed requirements and saved. No email was sent.'); }} />
     {error && !open && <p role="alert" className="max-w-sm text-xs text-rose-300">{error}</p>}
     {open && draft && createPortal(<div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-black/80 p-4" onClick={event => event.stopPropagation()}>
       <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby={`review-${lead.id}`} tabIndex={-1} className="max-h-[90vh] w-full max-w-2xl space-y-5 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 p-5 text-slate-100 shadow-2xl sm:p-7">

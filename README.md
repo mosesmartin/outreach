@@ -1,5 +1,35 @@
 # 🏢 SynergyTech Solutions: B2B Cold Outreach & Acquisition Engine
 
+## Live requirements → AI design → saved demo
+
+On the dashboard, **Generate demo** now opens a requirements conversation first.
+Nothing is generated just by opening the panel. Send your goals, audience, real
+services and design preferences; AI asks follow-up questions and updates an
+editable brief. Colors, theme, layout, sections/order and supported interactions
+can also be edited directly. **Generate from this brief** is enabled after the
+required details are complete and explicitly creates a new saved design.
+
+The chat and generation endpoints stream real provider text and actual workflow
+stages. `GEMINI_API_KEY` is required on the server. `GEMINI_DEMO_MODEL` optionally
+overrides the tested default `gemini-3.1-flash-lite`; provider availability can
+differ from the model catalog, so failures and timeouts remain visible. There is
+no static-template success fallback when AI or storage fails.
+
+Each new report stores a validated requirements/design payload in the existing
+`gemini_hook` text field; no database migration is needed. The saved design
+contains original AI copy, approved service descriptions, FAQs and process copy.
+The renderer applies the chosen theme, brand tones, layout, section order and
+features. It renders structured data with existing React components, not arbitrary
+AI code. Live payments, bookings and integrations require separate implementation.
+Internal requirements notes stay in the authenticated dashboard and are excluded
+from public presentation props. Old saved demos still render their previous
+presentation. New links require a deployment with the requirements renderer before
+a reviewed invitation can be sent. Generation never sends email automatically.
+
+Endpoints: authenticated `POST /api/leads/demo-session` and
+`POST /api/leads/generate-demo` (SSE). Tests cover partial streams, failed saves,
+missing requirements, persisted custom designs, public projection and send gates.
+
 ## Interactive demo design (UI UX Pro Max)
 
 The active design workflow is the repository's `ui-ux-pro-max` skill. The shared

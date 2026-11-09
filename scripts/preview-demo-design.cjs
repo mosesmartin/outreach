@@ -16,6 +16,7 @@ const output = path.join(root, '.local-previews', 'ui-ux-pro-max');
 const before = process.argv.includes('--before');
 const urlOption = process.argv.indexOf('--url');
 const productionUrl = urlOption >= 0 ? process.argv[urlOption + 1] : null;
+const generatedOption = process.argv.indexOf('--generated-file');
 if (productionUrl && (!['localhost', '127.0.0.1'].includes(new URL(productionUrl).hostname) || before)) throw new Error('--url is for the current local production build only');
 const fixtures = {
   technology: { business_name: 'synergytechsol', category: 'Home & Commercial Services', city: 'Dallas, TX', services: ['Services information', 'Appointments', 'Contact enquiries'], services_suggested: true },
@@ -28,6 +29,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function main() {
   await fs.mkdir(output, { recursive: true });
+  const generated = generatedOption >= 0 ? JSON.parse(await fs.readFile(process.argv[generatedOption + 1], 'utf8')) : null;
+  if (generated) fixtures.generated = generated.lead;
   const filename = path.join(root, 'components', 'DemoPrototypeClient.jsx');
   const source = before ? execFileSync('git', ['show', 'HEAD:components/DemoPrototypeClient.jsx'], { cwd: root, encoding: 'utf8' }) : await fs.readFile(filename, 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
@@ -58,7 +61,7 @@ async function main() {
   themeModule._compile(ts.transpileModule(await fs.readFile(themeFilename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, themeFilename);
   const scripts = await Promise.all(['react/umd/react.production.min.js', 'react-dom/umd/react-dom.production.min.js', 'lucide-react/dist/umd/lucide-react.min.js'].map(file => fs.readFile(path.join(root, 'node_modules', file), 'utf8')));
   for (const [name, initialLead] of Object.entries(fixtures)) {
-    const props = { initialLead, ...(before ? { initialTheme: themeModule.exports.getIndustryTheme(initialLead) } : {}) };
+    const props = { initialLead, ...(name === 'generated' ? { initialDesign: (await import('../lib/demoRequirements.mjs')).publicDesignPresentation(generated) } : {}), ...(before ? { initialTheme: themeModule.exports.getIndustryTheme(initialLead) } : {}) };
     const markup = renderToString(React.createElement(renderedModule.exports.default, props));
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${name} — UI UX Pro Max interactive preview</title><style>html{scroll-behavior:auto}body{margin:0;font-family:Arial,sans-serif}*{box-sizing:border-box}${css}</style></head><body><div id="preview-root">${markup}</div>${scripts.map((script, index) => `<script>${index === 2 ? 'window.react=window.React;' : ''}${script.replace(/<\/script/gi, '<\\/script')}</script>`).join('')}<script>${browserContent}window.module={exports:{}};window.exports=module.exports;window.require=function(name){if(name==='react')return window.React;if(name==='lucide-react')return window.LucideReact;if(name==='../lib/demoContent.mjs')return window.__demoContent;if(name.endsWith('.module.css'))return ${JSON.stringify(styleNames)};throw new Error(name)};const React=window.React;${compiled.replace(/<\/script/gi, '<\\/script')}\nReactDOM.hydrateRoot(document.getElementById('preview-root'),React.createElement(module.exports.default,${JSON.stringify(props)}));</script></body></html>`;
     await fs.writeFile(path.join(output, `${before ? 'before-' : ''}${name}.html`), html);
@@ -87,8 +90,8 @@ async function main() {
     const evaluate = async expression => { const value = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (value.exceptionDetails) throw new Error(value.exceptionDetails.text); return value.result.value; };
     await send('Page.enable'); await send('Runtime.enable');
     const checks = [];
-    for (const name of productionUrl ? ['technology'] : before ? ['technology', 'salon'] : Object.keys(fixtures)) {
-      for (const width of name === 'technology' ? [1440, 1024, 768, 390, 320] : [390]) {
+    for (const name of generated ? ['generated'] : productionUrl ? ['technology'] : before ? ['technology', 'salon'] : Object.keys(fixtures)) {
+      for (const width of ['technology', 'generated'].includes(name) ? [1440, 1024, 768, 390, 320] : [390]) {
         await send('Emulation.setDeviceMetricsOverride', { width, height: width === 1440 ? 1000 : 844, deviceScaleFactor: 1, mobile: width < 500 });
         const file = path.join(output, `${before ? 'before-' : ''}${name}.html`).replace(/\\/g, '/');
         const target = new URL(productionUrl || 'file:///' + file);
@@ -97,7 +100,7 @@ async function main() {
         for (let i = 0; i < 40; i++) { if (await evaluate("document.readyState==='complete' && Boolean(document.querySelector('form'))")) break; await sleep(100); }
         await sleep(200);
         assert.equal(await evaluate('document.documentElement.scrollWidth > innerWidth'), false, `${name}: no overflow at ${width}`);
-        if (!before) {
+        if (!before && name !== 'generated') {
           assert.ok(await evaluate("Boolean(getComputedStyle(document.querySelector('main section')).backgroundColor.match(/rgb\\(\\d/))"), 'hero theme styles are applied');
           if (width < 981) {
             await evaluate("document.querySelector('button[aria-controls=demo-navigation]').click()");
@@ -185,12 +188,21 @@ async function main() {
           await evaluate('document.activeElement?.blur()');
           await sleep(650);
         }
+        if (name === 'generated') {
+          assert.deepEqual(await evaluate("[...document.querySelectorAll('main > section[id]')].map(section=>section.id)"), ['home', ...generated.requirements.sections], 'real AI artifact uses approved sections in order');
+          assert.equal(await evaluate("document.querySelector('h1').textContent"), generated.design.headline.join(''), 'real AI headline is rendered');
+          assert.equal(await evaluate("document.querySelector('[data-layout]').getAttribute('data-layout')"), generated.requirements.layout);
+          assert.equal(await evaluate("document.querySelector('[data-appearance]').getAttribute('data-appearance')"), generated.requirements.theme);
+          assert.equal(await evaluate("Boolean(document.querySelector('#project-builder'))"), generated.requirements.features.includes('planner'));
+          assert.deepEqual(await evaluate("[...document.querySelectorAll('a[href^=\"#\"]')].map(link=>link.getAttribute('href')).filter(hash=>!document.getElementById(hash.slice(1)))"), [], 'custom sections leave no broken navigation links');
+          await sleep(650);
+        }
         await send('Emulation.setDeviceMetricsOverride', { width, height: width === 1440 ? 1000 : 844, deviceScaleFactor: 1, mobile: width < 500 });
         const dimensions = await evaluate('({width:document.documentElement.clientWidth,height:document.documentElement.scrollHeight})');
         const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width: dimensions.width, height: dimensions.height, scale: 1 } });
         const screenshot = `${before ? 'before-' : ''}${name}-${width}.png`;
         await fs.writeFile(path.join(output, screenshot), Buffer.from(shot.data, 'base64'));
-        if (name === 'technology') {
+        if (['technology', 'generated'].includes(name)) {
           const hero = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width: dimensions.width, height: Math.min(1000, dimensions.height), scale: 1 } });
           await fs.writeFile(path.join(output, `${before ? 'before-' : ''}${name}-${width}-hero.png`), Buffer.from(hero.data, 'base64'));
         }
@@ -198,7 +210,7 @@ async function main() {
       }
     }
     assert.deepEqual(errors, [], 'No browser exceptions');
-    if (!before) {
+    if (!before && !generated) {
       const review = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UI UX Pro Max interactive demos</title><style>body{margin:0;background:#f7f4ee;color:#29241f;font:15px/1.6 Arial,sans-serif}header{padding:32px 5%;border-bottom:1px solid #ddd}h1{font:40px Georgia,serif;margin:0}a{color:#633647}nav{display:flex;gap:24px;flex-wrap:wrap;margin-top:16px}main{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:32px 5%}h2{font-size:16px;font-weight:500}img{display:block;width:100%;border:1px solid #ddd;border-radius:12px}p{max-width:720px}@media(max-width:700px){main{grid-template-columns:1fr}}</style></head><body><header><h1>Explore. Choose. Make it yours.</h1><p>UI UX Pro Max direction: a working brief planner, service explorer, filterable concept previews and keyboard-accessible dialogs. Local review only.</p><nav><a href="technology.html">Open SynergyTech preview</a><a href="plumbing.html">Open plumbing preview</a><a href="technology-390-hero.png">See mobile screenshot</a></nav></header><main><section><h2>Before</h2><img src="before-technology-1440-hero.png" alt="Original incomplete SynergyTech concept"></section><section><h2>After</h2><img src="technology-1440-hero.png" alt="Rebuilt SynergyTech one-page website"></section></main></body></html>`;
       await fs.writeFile(path.join(output, 'index.html'), review);
     }
