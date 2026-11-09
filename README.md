@@ -2,24 +2,39 @@
 
 ## Local demo design trial (Unslop)
 
-The demo presentation uses a paper palette, editorial headings, a service menu,
-expandable service details and a responsive enquiry layout. Category-specific
-accents cover salons, home services, hospitality and other local businesses.
-Draft access checks and preview-only enquiry behavior remain in place.
+The demo now renders a complete one-page website: responsive navigation, hero,
+About, detailed services, a proposed process, illustrative concept examples,
+website benefits, FAQs, contact information when publicly sourced, a sample form
+and footer. Service links preselect the enquiry topic. Examples are clearly
+identified as concepts; no client projects, testimonials, prices or results are
+fabricated. Draft access checks and preview-only enquiry behavior remain in place.
+
+`lib/demoContent.mjs` selects copy and visual direction by actual services and
+industry. It preserves supplied descriptions and service lists. A first-party
+profile for SynergyTech uses public information from `https://synergytechsol.com/`
+(checked 2026-11-09), correcting the old Home & Commercial Services / Dallas
+defaults in its presentation without modifying saved lead records or draft IDs.
+Other businesses do not inherit SynergyTech's public contact details. New manual
+leads start with blank category/city fields, require an industry, and accept an
+optional business description.
 
 Unslop by [Damir Sokolovsky](https://github.com/heydamir/unslop) (CC BY 4.0)
 is installed locally in `.agents/skills/unslop`, which is ignored by Git.
 This design pass applies its spacing, color, icon, copy, type, layout, detail,
-visual and motion guidance. The hero uses real service labels rendered in code.
+visual and motion guidance alongside UI/UX layout guidance. The hero and concept
+illustrations are HTML/CSS and use actual service labels.
 
 Run `node scripts/preview-demo-design.cjs --before` to capture the committed
 design, then `node scripts/preview-demo-design.cjs` for the current design.
 Open `.local-previews/unslop/index.html` for the comparison and interactive
-previews. The script uses installed Chrome, fictional fixtures and bundled local
-assets; it does not access the database or send enquiries. It checks responsive
-overflow, mobile navigation, service details and the sample form. Preview files
-are ignored by Git. Run `npm run test:outreach` and `npm run build` for regression
-checks. Local changes require deployment to appear on the hosted site.
+previews. The script uses installed Chrome, local fixtures and bundled assets;
+it does not write database records or send enquiries. It checks responsive
+overflow, navigation, required sections, section links, FAQs, service selection
+and the sample form. Add `--url "http://127.0.0.1:3107/demo/...?..."` to verify an
+existing saved draft in a running local production build (the server reads the
+draft from Supabase). Preview files are ignored by Git. Run `npm run test:outreach`
+and `npm run build` for regression checks. Local changes require deployment to
+appear on the hosted site.
 
 ## Current outreach workflow: manual demo, review, then send
 

@@ -91,6 +91,8 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
           const submitted = JSON.parse(request.postData);
           assert.equal(submitted.business_name, 'synergy');
           assert.equal(submitted.email, null);
+          assert.equal(submitted.category, 'IT Consulting');
+          assert.equal(submitted.city, '', 'no fabricated default city');
           await sleep(200);
           if (importFails) { status = 503; payload = { error: 'The database could not save this lead.' }; }
           else {
@@ -147,7 +149,7 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
     await evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Add Single Lead').click()`);
     await waitFor(`Boolean(document.querySelector('#single-lead-form'))`);
-    await evaluate(`(() => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; const fields = document.querySelectorAll('#single-lead-form input'); for(const [index,value] of [[0,'synergy'],[2,'+1 512 555 0100']]){set.call(fields[index],value);fields[index].dispatchEvent(new Event('input',{bubbles:true}));} })()`);
+    await evaluate(`(() => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; const fields = document.querySelectorAll('#single-lead-form input'); for(const [index,value] of [[0,'synergy'],[2,'+1 512 555 0100'],[4,'IT Consulting']]){set.call(fields[index],value);fields[index].dispatchEvent(new Event('input',{bubbles:true}));} })()`);
     await evaluate(`document.querySelector('#single-lead-form').requestSubmit()`);
     await waitFor(`document.querySelector('#single-lead-form [role=alert]')?.textContent.includes('could not save')`);
     assert.equal(await evaluate(`document.querySelector('#single-lead-form input').value`), 'synergy', 'failed save preserves form values');

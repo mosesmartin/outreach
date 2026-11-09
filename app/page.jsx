@@ -283,9 +283,10 @@ export default function OutreachDashboard() {
     email: '',
     website_url: '',
     has_website: false,
-    category: 'Home & Commercial Services',
-    city: 'Dallas, TX',
+    category: '',
+    city: '',
     services: '',
+    description: '',
   });
 
   // CSV Drag and drop / file input
@@ -518,6 +519,7 @@ export default function OutreachDashboard() {
         has_website: false,
         category: newLead.category,
         city: newLead.city,
+        description: newLead.description,
         services: newLead.services ? newLead.services.split(',').map((s) => s.trim()).filter(Boolean) : [],
       };
 
@@ -543,9 +545,10 @@ export default function OutreachDashboard() {
           email: '',
           website_url: '',
           has_website: false,
-          category: 'Home & Commercial Services',
-          city: 'Dallas, TX',
+          category: '',
+          city: '',
           services: '',
+          description: '',
         });
         await fetchDashboardData();
       } else {
@@ -2048,10 +2051,11 @@ export default function OutreachDashboard() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Category / Industry</label>
+                    <label className="block text-slate-300 font-semibold mb-1">Category / Industry *</label>
                     <input
                       type="text"
-                      placeholder="e.g. HVAC & Plumbing"
+                      required
+                      placeholder="e.g. IT Consulting, Hair Salon, Plumbing"
                       value={newLead.category}
                       onChange={(e) => setNewLead({ ...newLead, category: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 transition text-xs"
@@ -2077,6 +2081,10 @@ export default function OutreachDashboard() {
                     onChange={(e) => setNewLead({ ...newLead, services: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 transition text-xs"
                   />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1" htmlFor="new-lead-description">About the business (Optional)</label>
+                  <textarea id="new-lead-description" rows={3} value={newLead.description} onChange={event => setNewLead({ ...newLead, description: event.target.value })} placeholder="What does the business do, who does it serve, and what makes its approach useful?" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 transition text-xs" />
                 </div>
               </form>
             </div>
