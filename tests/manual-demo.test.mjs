@@ -6,7 +6,6 @@ import { getServicesForNiche, demoServices } from '../lib/leadServices.mjs';
 import { extractCleanEmail } from '../lib/verifier.js';
 import { buildFunnelBEmail } from '../lib/email.js';
 import { discoverAndEnrichLeads } from '../lib/discovery.js';
-import { requirementsFor, designFor } from './fixtures/demo-design.mjs';
 
 const leadTemplate = { id: '11111111-1111-4111-8111-111111111111', business_name: 'Example Hair Studio', owner_name: 'Alex', business_slug: 'example-hair-studio', category: 'Hair Salon', city: 'Austin, TX', email: 'alex2028@example.com', services: ['Haircuts'], status: 'PENDING' };
 const legacy = { business_name: 'Sterling Luxury Hair Salon & Spa 2', owner_name: 'Natalie Miller', email: 'natalie.miller38@gmail.com' };
@@ -22,7 +21,7 @@ function memoryStore(lead = { ...leadTemplate }) {
   };
 }
 const verified = async () => ({ valid: true });
-const generate = store => generateLeadDemo(store.lead.id, { store, appBaseUrl: 'https://preview.example.test', requirements: requirementsFor(store.lead), designGenerator: async ({ requirements }) => ({ design: designFor(requirements) }) });
+const generate = store => generateLeadDemo(store.lead.id, { store, appBaseUrl: 'https://preview.example.test' });
 const approved = (store, draft) => ({ leadId: store.lead.id, draftId: draft.id, reviewed: true, subject: draft.email_subject, body: draft.email_body });
 
 test('Legacy simulated contacts are blocked without rejecting ordinary numeric mailboxes', () => {
@@ -101,7 +100,7 @@ test('An unknown placeholder email does not block a real business preview but ca
 test('An uncertain SMTP outcome remains locked instead of permitting duplicate retries', async () => {
   const store = memoryStore(); const { draft } = await generate(store);
   await assert.rejects(sendReviewedDemo(approved(store, draft), { store, checkPreview: async () => true, verify: verified, send: async () => ({ success: false, uncertain: true }) }), /uncertain/);
-  assert.ok(store.reports[0].sent_at);
+  assert.ok(draft.sent_at);
   assert.equal(store.lead.status, 'PENDING');
 });
 test('Email wording follows salon appointments without invented speed or review claims', () => {

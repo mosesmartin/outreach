@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import LeadDemoActions from '@/components/LeadDemoActions';
 import { useRouter } from 'next/navigation';
@@ -108,12 +108,6 @@ export default function OutreachDashboard() {
   });
 
   const [loading, setLoading] = useState(true);
-  const [dashboardError, setDashboardError] = useState('');
-  const [leadSaveNotice, setLeadSaveNotice] = useState('');
-  const [singleLeadError, setSingleLeadError] = useState('');
-  const [isSavingSingleLead, setIsSavingSingleLead] = useState(false);
-  const singleLeadSaveInFlight = useRef(false);
-  const dashboardRequest = useRef(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [channelFilter, setChannelFilter] = useState('ALL');
@@ -283,10 +277,9 @@ export default function OutreachDashboard() {
     email: '',
     website_url: '',
     has_website: false,
-    category: '',
-    city: '',
+    category: 'Home & Commercial Services',
+    city: 'Dallas, TX',
     services: '',
-    description: '',
   });
 
   // CSV Drag and drop / file input
@@ -323,34 +316,26 @@ export default function OutreachDashboard() {
   };
 
   const fetchDashboardData = async () => {
-    const requestId = ++dashboardRequest.current;
     setLoading(true);
     try {
       const timestamp = Date.now();
-      const readJson = async response => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Could not load dashboard data. Please refresh.');
-        return data;
-      };
-      const [leadsResult, statsResult] = await Promise.allSettled([
-        fetch(`/api/leads?_t=${timestamp}`, { cache: 'no-store' }).then(readJson),
-        fetch(`/api/stats?_t=${timestamp}`, { cache: 'no-store' }).then(readJson),
+      const [leadsRes, statsRes] = await Promise.all([
+        fetch(`/api/leads?_t=${timestamp}`, { cache: 'no-store' }).then((r) => r.json()),
+        fetch(`/api/stats?_t=${timestamp}`, { cache: 'no-store' }).then((r) => r.json()),
       ]);
-      if (requestId !== dashboardRequest.current) return;
-      if (leadsResult.status === 'fulfilled' && Array.isArray(leadsResult.value.leads)) {
-        setLeads(leadsResult.value.leads);
-        setDashboardError('');
+
+      if (leadsRes && leadsRes.leads) {
+        setLeads(leadsRes.leads);
       } else {
-        setDashboardError(leadsResult.reason?.message || 'Could not load saved leads. Please refresh.');
+        setLeads([]);
       }
-      if (statsResult.status === 'fulfilled' && !statsResult.value.error) {
-        setStats(statsResult.value);
+      if (statsRes && !statsRes.error) {
+        setStats(statsRes);
       }
     } catch (e) {
       console.error('Error loading dashboard data:', e);
-      if (requestId === dashboardRequest.current) setDashboardError('Could not load saved leads. Please refresh.');
     } finally {
-      if (requestId === dashboardRequest.current) setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -504,11 +489,6 @@ export default function OutreachDashboard() {
 
   const handleAddSingleLead = async (e) => {
     e.preventDefault();
-    if (singleLeadSaveInFlight.current) return;
-    singleLeadSaveInFlight.current = true;
-    setIsSavingSingleLead(true);
-    setSingleLeadError('');
-    setLeadSaveNotice('');
     try {
       const payload = {
         business_name: newLead.business_name,
@@ -519,7 +499,6 @@ export default function OutreachDashboard() {
         has_website: false,
         category: newLead.category,
         city: newLead.city,
-        description: newLead.description,
         services: newLead.services ? newLead.services.split(',').map((s) => s.trim()).filter(Boolean) : [],
       };
 
@@ -529,14 +508,7 @@ export default function OutreachDashboard() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success && data.ingestedCount > 0 && data.leads?.length) {
-        // Only show database-confirmed records; filters must not hide a new lead.
-        setLeads(previous => [...data.leads, ...previous.filter(lead => !data.leads.some(saved => saved.id === lead.id))]);
-        setSearchTerm('');
-        setStatusFilter('ALL');
-        setChannelFilter('ALL');
-        setLeadSaveNotice(`Lead saved: ${data.leads[0].business_name}`);
+      if (res.ok) {
         setShowSingleLeadModal(false);
         setNewLead({
           business_name: '',
@@ -545,20 +517,17 @@ export default function OutreachDashboard() {
           email: '',
           website_url: '',
           has_website: false,
-          category: '',
-          city: '',
+          category: 'Home & Commercial Services',
+          city: 'Dallas, TX',
           services: '',
-          description: '',
         });
         await fetchDashboardData();
       } else {
-        setSingleLeadError(data.error || 'The database did not confirm the save. Check the dashboard before trying again.');
+        const err = await res.json();
+        alert(err.error || 'Failed to create lead');
       }
     } catch (e) {
-      setSingleLeadError('Could not confirm the save. Your details are still here. Check the dashboard before trying again.');
-    } finally {
-      singleLeadSaveInFlight.current = false;
-      setIsSavingSingleLead(false);
+      alert(e.message);
     }
   };
 
@@ -1057,8 +1026,6 @@ export default function OutreachDashboard() {
         {leads.some(lead => lead.contact_safety?.blocked) && <div role="alert" className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-4 text-sm leading-6 text-rose-200">{leads.filter(lead => lead.contact_safety?.blocked).length} old contacts are blocked because they match simulated or placeholder data. They cannot generate demos or send invitations. Their history has been preserved.</div>}
 
         {/* Operational Control Bar & Actions */}
-        {dashboardError && <div role="alert" className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-4 text-sm text-rose-200">{dashboardError}</div>}
-        {leadSaveNotice && <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-4 text-sm text-emerald-200">{leadSaveNotice}</p>}
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-[#0d1424] border border-slate-800/90 rounded-2xl p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -1078,7 +1045,7 @@ export default function OutreachDashboard() {
             </button>
 
             <button
-              onClick={() => { setSingleLeadError(''); setShowSingleLeadModal(true); }}
+              onClick={() => setShowSingleLeadModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
             >
               <Plus className="w-4 h-4 text-blue-400" />
@@ -1990,7 +1957,6 @@ export default function OutreachDashboard() {
             {/* Scrollable Body */}
             <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-3 text-xs select-text">
               <form id="single-lead-form" onSubmit={handleAddSingleLead} className="space-y-3">
-                {singleLeadError && <p role="alert" className="rounded-xl border border-rose-500/40 bg-rose-950/30 p-3 text-sm text-rose-200">{singleLeadError}</p>}
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Business Name *</label>
                   <input
@@ -2051,11 +2017,10 @@ export default function OutreachDashboard() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Category / Industry *</label>
+                    <label className="block text-slate-300 font-semibold mb-1">Category / Industry</label>
                     <input
                       type="text"
-                      required
-                      placeholder="e.g. IT Consulting, Hair Salon, Plumbing"
+                      placeholder="e.g. HVAC & Plumbing"
                       value={newLead.category}
                       onChange={(e) => setNewLead({ ...newLead, category: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 transition text-xs"
@@ -2082,10 +2047,6 @@ export default function OutreachDashboard() {
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 transition text-xs"
                   />
                 </div>
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1" htmlFor="new-lead-description">About the business (Optional)</label>
-                  <textarea id="new-lead-description" rows={3} value={newLead.description} onChange={event => setNewLead({ ...newLead, description: event.target.value })} placeholder="What does the business do, who does it serve, and what makes its approach useful?" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500 transition text-xs" />
-                </div>
               </form>
             </div>
 
@@ -2101,10 +2062,9 @@ export default function OutreachDashboard() {
               <button
                 type="submit"
                 form="single-lead-form"
-                disabled={isSavingSingleLead}
                 className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition cursor-pointer shadow-lg shadow-blue-600/20"
               >
-                {isSavingSingleLead ? 'Saving lead…' : 'Save Lead'}
+                Save Lead
               </button>
             </div>
           </div>

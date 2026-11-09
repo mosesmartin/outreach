@@ -32,6 +32,3 @@ yarn-error.log*
 .vscode
 .idea
 .agents
-
-# Local design review fixtures and browser screenshots
-/.local-previews/
