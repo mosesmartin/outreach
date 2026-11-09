@@ -1,6 +1,7 @@
 import { requestAccess } from '@/lib/websiteRequestAccess';
 import { leadContactSafety, syntheticLeadReason } from '@/lib/leadSafety.mjs';
 import { currentDemoDraft } from '@/lib/manualDemo.mjs';
+import { persistLeadImports, restoreImportedLead } from '@/lib/leadImport.mjs';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug';
@@ -22,7 +23,6 @@ function ensureDataDir() {
 }
 
 function loadFallbackLeads() {
-  ensureDataDir();
   if (fs.existsSync(BACKUP_FILE)) {
     try {
       const content = fs.readFileSync(BACKUP_FILE, 'utf8');
@@ -155,6 +155,7 @@ export async function GET(req) {
 
   const enrichWithCrmFields = (lead) => {
     if (!lead) return lead;
+    lead = restoreImportedLead(lead);
     const draft = currentDemoDraft(lead);
     const contactSafety = leadContactSafety(lead);
     const phone = lead.phone || extractPhoneFallback(lead.status_reason) || null;
@@ -187,10 +188,9 @@ export async function GET(req) {
 
   if (!isSupabaseConfigured) {
     return NextResponse.json({
-      configured: true,
-      message: 'Running in resilient storage mode',
-      leads: fallbackList.map(enrichWithCrmFields),
-    });
+      configured: false,
+      error: 'Lead storage is not configured. Please check the database connection.',
+    }, { status: 503 });
   }
 
   try {
@@ -216,11 +216,10 @@ export async function GET(req) {
     const { data, error } = await query;
 
     if (error) {
-      console.warn('Supabase query error, serving fallback store:', error.message);
+      console.warn('Lead list database error:', error.code);
       return NextResponse.json({
-        configured: true,
-        leads: fallbackList.map(enrichWithCrmFields),
-      });
+        error: 'Could not load saved leads from the database. Please refresh or check the database connection.',
+      }, { status: 503 });
     }
 
     // Merge any unsaved fallback leads with DB data
@@ -237,11 +236,10 @@ export async function GET(req) {
       leads: merged.map(enrichWithCrmFields),
     });
   } catch (err) {
-    console.warn('Supabase connection exception, returning fallback list:', err.message);
+    console.warn('Lead list connection exception:', err.message);
     return NextResponse.json({
-      configured: true,
-      leads: fallbackList.map(enrichWithCrmFields),
-    });
+      error: 'Could not load saved leads from the database. Please refresh or check the database connection.',
+    }, { status: 503 });
   }
 }
 
@@ -305,74 +303,13 @@ export async function POST(req) {
       );
     }
 
-    let insertedData = null;
-
-    // Try inserting into Supabase
-    if (isSupabaseConfigured) {
-      try {
-        const supabase = getSupabaseAdmin();
-        const recordsToInsert = validLeads.map((l) => {
-          const { id, ...rest } = l;
-          return {
-            ...rest,
-            email: rest.email || '', // Unknown on legacy NOT NULL schema; never invent a mailbox.
-          };
-        });
-
-        const { data, error } = await supabase
-          .from('leads')
-          .insert(recordsToInsert)
-          .select();
-
-        if (!error && data) {
-          insertedData = data;
-        } else if (error) {
-          // Fallback if some new columns haven't refreshed in Supabase schema cache
-          console.warn('Supabase insert notice, attempting schema-safe insert:', error.message);
-          const sanitizedRecords = recordsToInsert.map(r => {
-            const copy = { ...r };
-            delete copy.phone;
-            delete copy.address;
-            delete copy.stage;
-            delete copy.deal_value;
-            delete copy.retainer_value;
-            delete copy.priority;
-            delete copy.notes;
-            delete copy.follow_up_date;
-            return copy;
-          });
-          const { data: retryData } = await supabase.from('leads').insert(sanitizedRecords).select();
-          if (retryData) {
-            insertedData = retryData.map((d, i) => ({
-              ...d,
-              phone: validLeads[i]?.phone,
-              address: validLeads[i]?.address,
-              services: validLeads[i]?.services,
-              stage: validLeads[i]?.stage,
-              deal_value: validLeads[i]?.deal_value,
-              retainer_value: validLeads[i]?.retainer_value,
-              priority: validLeads[i]?.priority,
-              notes: validLeads[i]?.notes,
-              follow_up_date: validLeads[i]?.follow_up_date,
-            }));
-          }
-        }
-      } catch (dbErr) {
-        console.warn('Supabase connect notice (saving to resilient fallback):', dbErr.message);
-      }
-    }
-
-    // Always maintain local persistent fallback store
-    const existingFallback = loadFallbackLeads();
-    const existingSlugs = new Set(existingFallback.map((l) => l.business_slug));
-    const toAppend = validLeads.filter((l) => !existingSlugs.has(l.business_slug));
-    saveFallbackLeads([...toAppend, ...existingFallback]);
+    const insertedData = await persistLeadImports(isSupabaseConfigured ? getSupabaseAdmin() : null, validLeads);
 
     return NextResponse.json({
       success: true,
-      ingestedCount: insertedData?.length || validLeads.length,
+      ingestedCount: insertedData.length,
       skippedWithWebsite,
-      leads: (insertedData || validLeads).map((l, idx) => ({
+      leads: insertedData.map((l, idx) => ({
         ...l,
         phone: l.phone || validLeads[idx]?.phone || extractPhoneFallback(l.status_reason),
       })),
@@ -381,7 +318,7 @@ export async function POST(req) {
     console.error('API /api/leads error:', err);
     return NextResponse.json(
       { error: err?.message || 'Failed to ingest leads' },
-      { status: 500 }
+      { status: err.status || 500 }
     );
   }
 }
