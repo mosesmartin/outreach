@@ -1,6 +1,7 @@
 import { requestAccess } from '@/lib/websiteRequestAccess';
 import { syntheticLeadReason } from '@/lib/leadSafety.mjs';
 import { currentDemoDraft } from '@/lib/manualDemo.mjs';
+import { restoreImportedLead } from '@/lib/leadImport.mjs';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import fs from 'fs';
@@ -52,6 +53,7 @@ export async function GET(req) {
     leads = loadFallbackLeads();
   }
 
+  leads = leads.map(restoreImportedLead);
   const blockedCount = leads.filter(syntheticLeadReason).length;
   const totalCount = leads.length;
   leads = leads.filter(lead => !syntheticLeadReason(lead));

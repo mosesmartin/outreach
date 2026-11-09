@@ -57,6 +57,10 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
     let setupError = false;
     let searchCalls = 0;
     let saveCalls = 0;
+    let importCalls = 0;
+    let importFails = true;
+    let leadListUnavailable = false;
+    const importedLeads = [];
     const send = (method, params = {}) => new Promise((resolve, reject) => {
       const id = ++nextId;
       const timer = setTimeout(() => { pending.delete(id); reject(new Error(`${method} timed out`)); }, 15000);
@@ -78,7 +82,23 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
         let status = 200;
         const url = new URL(request.url);
         if (url.pathname === '/api/auth/me') payload = { user: { name: 'QA Admin', role: 'ADMIN' } };
-        else if (url.pathname === '/api/leads' && request.method === 'GET') payload = { configured: true, leads: [fixture, blocked] };
+        else if (url.pathname === '/api/leads' && request.method === 'GET') {
+          status = leadListUnavailable ? 503 : 200;
+          payload = leadListUnavailable ? { error: 'Could not load saved leads from the database.' } : { configured: true, leads: [fixture, blocked, ...importedLeads] };
+        }
+        else if (url.pathname === '/api/leads' && request.method === 'POST') {
+          importCalls++;
+          const submitted = JSON.parse(request.postData);
+          assert.equal(submitted.business_name, 'synergy');
+          assert.equal(submitted.email, null);
+          await sleep(200);
+          if (importFails) { status = 503; payload = { error: 'The database could not save this lead.' }; }
+          else {
+            const saved = { ...submitted, id: 'dddddddd-1111-4222-8333-aabbccddeeff', status: 'PENDING', stage: 'NEW_LEAD', contact_safety: { blocked: false }, demo: null };
+            importedLeads.push(saved);
+            payload = { success: true, ingestedCount: 1, leads: [saved] };
+          }
+        }
         else if (url.pathname === '/api/stats') payload = { configured: true, totalLeads: 2, pending: 1, blockedContacts: 1, prototypesReady: fixture.demo ? 1 : 0 };
         else if (url.pathname.endsWith('/generate-demo')) { searchCalls++; fixture.demo = { ...draft }; payload = { success: true, emailSent: false, draft: fixture.demo }; }
         else if (url.pathname.endsWith('/send-reviewed')) {
@@ -123,6 +143,33 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
     await evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent === 'Send reviewed email').click()`);
     await waitFor(`document.body.innerText.includes('Test SMTP accepted') || !document.querySelector('[role="dialog"]')`);
     assert.equal(saveCalls, 1);
+    // Reproduce manual import, including failed saves, double submits and filters.
+    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
+    await evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Add Single Lead').click()`);
+    await waitFor(`Boolean(document.querySelector('#single-lead-form'))`);
+    await evaluate(`(() => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; const fields = document.querySelectorAll('#single-lead-form input'); for(const [index,value] of [[0,'synergy'],[2,'+1 512 555 0100']]){set.call(fields[index],value);fields[index].dispatchEvent(new Event('input',{bubbles:true}));} })()`);
+    await evaluate(`document.querySelector('#single-lead-form').requestSubmit()`);
+    await waitFor(`document.querySelector('#single-lead-form [role=alert]')?.textContent.includes('could not save')`);
+    assert.equal(await evaluate(`document.querySelector('#single-lead-form input').value`), 'synergy', 'failed save preserves form values');
+    assert.equal(importedLeads.length, 0);
+    await screenshot('single-lead-save-failed.png');
+    // Existing filters must not hide a newly saved phone-only lead.
+    await evaluate(`(() => {const input=document.querySelector('input[placeholder^="Search business"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'unmatched search');input.dispatchEvent(new Event('input',{bubbles:true}));for(const [index,value] of [[0,'CONTACTED'],[1,'WITH_EMAIL']]){const select=[...document.querySelectorAll('select')].find(select=>select.querySelector(index===0?'option[value=CONTACTED]':'option[value=WITH_EMAIL]'));Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,value);select.dispatchEvent(new Event('change',{bubbles:true}));}})()`);
+    importFails = false;
+    await evaluate(`document.querySelector('#single-lead-form').requestSubmit(); document.querySelector('#single-lead-form').requestSubmit()`);
+    await waitFor(`!document.querySelector('#single-lead-form') && document.body.innerText.includes('Lead saved: synergy')`);
+    assert.equal(importCalls, 2, 'one failed attempt and one successful attempt; duplicate submission prevented');
+    assert.equal(importedLeads.length, 1);
+    await waitFor(`document.querySelector('input[placeholder^="Search business"]').value === ''`);
+    assert.deepEqual(await evaluate(`['CONTACTED','WITH_EMAIL'].map(value=>[...document.querySelectorAll('select')].find(select=>select.querySelector('option[value='+value+']')).value)`), ['ALL', 'ALL']);
+    await send('Page.reload');
+    await waitFor(`document.body.innerText.includes('synergy') && !document.body.innerText.includes('Loading your')`);
+    await screenshot('single-lead-saved-dashboard.png');
+    leadListUnavailable = true;
+    await evaluate(`document.querySelector('button[title="Refresh leads data"]').click()`);
+    await waitFor(`document.body.innerText.includes('Could not load saved leads from the database.')`);
+    assert.ok(await evaluate(`document.body.innerText.includes('synergy')`), 'failed refresh preserves visible leads');
+    assert.equal(saveCalls, 1, 'manual import never calls the send endpoint');
     await send('Page.navigate', { url: draft.prototype_url });
     await waitFor(`document.body.innerText.includes('Salon appointments')`);
     assert.equal(await evaluate(`/Furnace|Emergency AC|99\\/100|5-star/.test(document.body.innerText)`), false);
@@ -130,7 +177,7 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
     await screenshot('salon-concept-desktop.png');
     assert.deepEqual(runtimeErrors, []);
-    console.log(JSON.stringify({ passed: true, checks: ['no automatic demo links', 'synthetic contact blocked', 'separate Generate demo button', 'generation sends no email', 'review checkbox required', 'only explicit send calls endpoint', 'desktop/mobile review dialog', 'salon concept excludes HVAC and fabricated claims', 'no browser exceptions'], fixtureOnly: true, realEmailsSent: 0, screenshots: output }));
+    console.log(JSON.stringify({ passed: true, checks: ['no automatic demo links', 'synthetic contact blocked', 'separate Generate demo button', 'generation sends no email', 'review checkbox required', 'only explicit send calls endpoint', 'desktop/mobile review dialog', 'manual save failure retains form', 'manual save appears after reload', 'duplicate submit prevented', 'filters cleared after save', 'failed refresh preserves existing leads', 'salon concept excludes HVAC and fabricated claims', 'no browser exceptions'], fixtureOnly: true, realEmailsSent: 0, screenshots: output }));
     await send('Browser.close');
   } finally { socket?.close(); browser.kill(); }
 })().catch((error) => { console.error(error.message); process.exitCode = 1; });

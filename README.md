@@ -23,6 +23,14 @@ checks. Local changes require deployment to appear on the hosted site.
 
 ## Current outreach workflow: manual demo, review, then send
 
+Manual and CSV imports confirm success only after Supabase returns saved records.
+Older lead schemas are supported without a migration: optional contact/CRM fields
+are retained with the saved record and restored on reads. Failed saves keep the
+single-lead form open with its values and an error. Successful manual saves clear
+filters, show a confirmation and refresh the list; failed list refreshes preserve
+the visible records and show an error. Imports no longer report local JSON writes
+as successful database saves.
+
 Business discovery/import saves contacts only. Each lead has a **Generate demo**
 button, which saves a draft in `audit_reports` and does not send email. Open the
 generated concept, check the business's services and verify the recipient, then
