@@ -1,6 +1,14 @@
 # 🏢 SynergyTech Solutions: B2B Cold Outreach & Acquisition Engine
 
-## Local demo design trial (Unslop)
+## Interactive demo design (UI UX Pro Max)
+
+The active design workflow is the repository's `ui-ux-pro-max` skill. The shared
+demo includes a three-step enquiry planner, selectable service details, filtered
+concept previews with native dialogs, section-aware navigation and restrained
+entrance animations. Planner choices create an editable brief in the sample form.
+Dialogs support keyboard focus and Escape, and reduced-motion preferences disable
+animations. These interactions apply across the lead categories; nothing is sent
+or written to the database from a public demo.
 
 The demo now renders a complete one-page website: responsive navigation, hero,
 About, detailed services, a proposed process, illustrative concept examples,
@@ -19,14 +27,13 @@ leads start with blank category/city fields, require an industry, and accept an
 optional business description.
 
 Unslop by [Damir Sokolovsky](https://github.com/heydamir/unslop) (CC BY 4.0)
-is installed locally in `.agents/skills/unslop`, which is ignored by Git.
-This design pass applies its spacing, color, icon, copy, type, layout, detail,
-visual and motion guidance alongside UI/UX layout guidance. The hero and concept
-illustrations are HTML/CSS and use actual service labels.
+remains installed as an optional local skill; it is not the active design workflow.
+Historical attribution is retained for earlier derived work. New direction uses
+UI UX Pro Max's interactive experience, motion, progress and accessibility guidance.
 
 Run `node scripts/preview-demo-design.cjs --before` to capture the committed
 design, then `node scripts/preview-demo-design.cjs` for the current design.
-Open `.local-previews/unslop/index.html` for the comparison and interactive
+Open `.local-previews/ui-ux-pro-max/index.html` for the comparison and interactive
 previews. The script uses installed Chrome, local fixtures and bundled assets;
 it does not write database records or send enquiries. It checks responsive
 overflow, navigation, required sections, section links, FAQs, service selection

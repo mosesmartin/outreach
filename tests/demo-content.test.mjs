@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getDemoContent } from '../lib/demoContent.mjs';
+import { createDemoBrief, getDemoContent } from '../lib/demoContent.mjs';
 
 test('The shared SynergyTech lead uses public technology content instead of the old form defaults', () => {
   const saved = { business_name: 'synergytechsol', category: 'Home & Commercial Services', city: 'Dallas, TX', services: ['Services information', 'Appointments', 'Contact enquiries'], services_suggested: true };
@@ -40,4 +40,14 @@ test('Specific service content distinguishes technology from trades without subs
   assert.equal(getDemoContent({ category: 'Plumbing', services: ['Drain repairs'] }).industry, 'trades');
   const confirmed = getDemoContent({ business_name: 'synergytechsol', services: ['Custom IT consultation'], services_suggested: false });
   assert.deepEqual(confirmed.services.map(service => service.title), ['Custom IT consultation'], 'sourced fallback services do not replace supplied services');
+});
+
+test('Interactive planner turns only visitor choices into an editable enquiry brief', () => {
+  const brief = createDemoBrief({ services: [' IT consulting ', 'Workflow automation'], goal: 'Connect existing tools', timing: 'My timing is flexible', details: 'Keep our existing CRM.' });
+  assert.match(brief, /Interested in: IT consulting, Workflow automation/);
+  assert.match(brief, /My goal: Connect existing tools/);
+  assert.match(brief, /Preferred timing: My timing is flexible/);
+  assert.match(brief, /Keep our existing CRM\./);
+  assert.doesNotMatch(brief, /\$|guarantee|discount|delivery in/i);
+  assert.equal(createDemoBrief(), 'Interested in: Help choosing the right service');
 });
