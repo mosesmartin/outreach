@@ -26,12 +26,17 @@ const draft = { id: 'cccccccc-1111-4222-8333-aabbccddeeff', prototype_url: base+
   const { renderToString } = require('react-dom/server');
   const filename = path.join(process.cwd(), 'components', 'DemoPrototypeClient.jsx');
   const compiled = ts.transpileModule(await fs.readFile(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
-  const renderedModule = new Module(filename); renderedModule.paths = Module._nodeModulePaths(process.cwd()); renderedModule._compile(compiled, filename);
+  const componentCss = await fs.readFile(path.join(process.cwd(), 'components', 'DemoPrototypeClient.module.css'), 'utf8');
+  const classNames = Object.fromEntries([...componentCss.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map(match => [match[1], match[1]]));
+  const renderedModule = new Module(filename);
+  renderedModule.paths = Module._nodeModulePaths(process.cwd());
+  renderedModule.require = name => name.endsWith('.module.css') ? classNames : require(name);
+  renderedModule._compile(compiled, filename);
   const { demoServices } = await import('../lib/leadServices.mjs');
   const corrected = demoServices({ category: 'Hair Salon', services: ['Emergency AC Repair & Recharge'] });
   const markup = renderToString(React.createElement(renderedModule.exports.default, { initialLead: { ...fixture, services: corrected.services, services_suggested: corrected.suggested }, initialTheme: { buttonClass: 'bg-blue-600 text-white', accentText: 'text-cyan-300', gradientClass: 'from-blue-950 to-slate-900' } }));
   const css = (await fs.readdir(path.join(process.cwd(), '.next', 'static', 'css'))).filter(file => file.endsWith('.css')).map(file => `<link rel="stylesheet" href="${base}/_next/static/css/${file}">`).join('');
-  const demoHtml = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1">${css}</head><body class="font-sans">${markup}</body></html>`;
+  const demoHtml = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1">${css}<style>${componentCss}</style></head><body class="font-sans">${markup}</body></html>`;
   const browser = spawn('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
     '--remote-debugging-port=9337', `--user-data-dir=${path.join(output, 'profile')}`, 'about:blank',

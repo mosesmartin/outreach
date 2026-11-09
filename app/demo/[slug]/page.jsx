@@ -2,7 +2,6 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { currentDemoDraft } from '@/lib/manualDemo.mjs';
-import { getIndustryTheme } from '@/lib/demoThemes';
 import { demoServices } from '@/lib/leadServices.mjs';
 import DemoPrototypeClient from '@/components/DemoPrototypeClient';
 export const dynamic = 'force-dynamic';
@@ -19,5 +18,5 @@ export default async function DemoPrototypePage({ params, searchParams }) {
   if (url.pathname !== `/demo/${params.slug}` || url.searchParams.get('v') !== searchParams.v) notFound();
   const { services, suggested } = demoServices(lead);
   const publicLead = { business_name: lead.business_name, category: lead.category, city: lead.city, services, services_suggested: suggested };
-  return <DemoPrototypeClient initialLead={publicLead} initialTheme={getIndustryTheme(lead)} />;
+  return <DemoPrototypeClient initialLead={publicLead} />;
 }

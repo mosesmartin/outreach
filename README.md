@@ -1,5 +1,26 @@
 # 🏢 SynergyTech Solutions: B2B Cold Outreach & Acquisition Engine
 
+## Local demo design trial (Unslop)
+
+The demo presentation uses a paper palette, editorial headings, a service menu,
+expandable service details and a responsive enquiry layout. Category-specific
+accents cover salons, home services, hospitality and other local businesses.
+Draft access checks and preview-only enquiry behavior remain in place.
+
+Unslop by [Damir Sokolovsky](https://github.com/heydamir/unslop) (CC BY 4.0)
+is installed locally in `.agents/skills/unslop`, which is ignored by Git.
+This design pass applies its spacing, color, icon, copy, type, layout, detail,
+visual and motion guidance. The hero uses real service labels rendered in code.
+
+Run `node scripts/preview-demo-design.cjs --before` to capture the committed
+design, then `node scripts/preview-demo-design.cjs` for the current design.
+Open `.local-previews/unslop/index.html` for the comparison and interactive
+previews. The script uses installed Chrome, fictional fixtures and bundled local
+assets; it does not access the database or send enquiries. It checks responsive
+overflow, mobile navigation, service details and the sample form. Preview files
+are ignored by Git. Run `npm run test:outreach` and `npm run build` for regression
+checks. Local changes require deployment to appear on the hosted site.
+
 ## Current outreach workflow: manual demo, review, then send
 
 Business discovery/import saves contacts only. Each lead has a **Generate demo**

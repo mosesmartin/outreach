@@ -1,50 +1,126 @@
-'use client';
-import { useState } from 'react';
-import { ArrowRight, CheckCircle2, MapPin, Sparkles } from 'lucide-react';
+﻿'use client';
 
-export default function DemoPrototypeClient({ initialLead: lead, initialTheme: theme }) {
+import { useState } from 'react';
+import { ArrowRight, MapPin, Menu, X } from 'lucide-react';
+import styles from './DemoPrototypeClient.module.css';
+
+// Design pass informed by Unslop, Damir Sokolovsky (CC BY 4.0).
+// https://github.com/heydamir/unslop — preserve factual content and demo-only interactions.
+function presentationFor(category = '') {
+  if (/salon|spa|beauty|hair|barber/i.test(category)) {
+    return { tone: 'rose', headline: ['A little time', 'for yourself'], menu: 'The service edit', noun: 'Your next visit' };
+  }
+  if (/plumb|roof|contract|hvac|heating|electric|clean|repair|maintenance/i.test(category)) {
+    return { tone: 'earth', headline: ['A good place', 'to start'], menu: 'Around your home', noun: 'Your next project' };
+  }
+  if (/restaurant|cafe|dining|food|travel|tour/i.test(category)) {
+    return { tone: 'olive', headline: ['Make room', 'for a little more'], menu: 'Take a closer look', noun: 'Your next experience' };
+  }
+  if (/dent|clinic|doctor|medic|health/i.test(category)) {
+    return { tone: 'ink', headline: ['Your next visit', 'starts here'], menu: 'Explore your options', noun: 'Your enquiry' };
+  }
+  return { tone: 'ink', headline: [category || 'Local services', 'within reach'], menu: 'A closer look', noun: 'Your next step' };
+}
+
+export default function DemoPrototypeClient({ initialLead: lead }) {
   const [preview, setPreview] = useState(false);
-  const services = lead.services || [];
-  return <div className="min-h-screen bg-slate-950 text-slate-100">
-    <aside className="border-b border-cyan-500/30 bg-slate-900 px-4 py-4 text-center text-sm text-cyan-200">
-      Website concept for review. Sample content; this is not the business's official booking website.
-    </aside>
-    <header className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-6">
-      <span className="text-lg font-bold">{lead.business_name}</span>
-      <a href="#enquiry" className={`rounded-xl px-5 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${theme?.buttonClass || 'bg-blue-600 text-white'}`}>View sample enquiry</a>
-    </header>
-    <main className="mx-auto max-w-6xl space-y-16 px-5 py-12 sm:py-20">
-      <section className="grid items-center gap-10 lg:grid-cols-[1.3fr_1fr]">
-        <div className="space-y-6">
-          <p className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs ${theme?.badgeBg || 'border-cyan-500/30 text-cyan-200'}`}><Sparkles className="h-4 w-4" aria-hidden="true" />Proposed mobile website</p>
-          <h1 className="max-w-3xl text-4xl font-bold leading-tight sm:text-6xl">A welcoming online home for <span className={theme?.accentText || 'text-cyan-300'}>{lead.business_name}</span></h1>
-          <p className="max-w-xl text-lg leading-8 text-slate-300">Explore a concept for presenting your {lead.category || 'business'} services and helping customers take the next step.</p>
-          {lead.city && <p className="flex items-center gap-2 text-sm text-slate-400"><MapPin className="h-4 w-4" aria-hidden="true" />{lead.city}</p>}
-          <a href="#services" className="inline-flex items-center gap-2 rounded-xl border border-slate-600 px-5 py-3 text-sm hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Explore the layout<ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
-        </div>
-        <div className={`rounded-3xl border border-slate-700 bg-gradient-to-br p-8 ${theme?.gradientClass || 'from-blue-950 to-slate-900'}`}>
-          <div className="space-y-5 rounded-2xl bg-slate-950/90 p-6">
-            <p className="text-xs font-semibold uppercase tracking-widest text-cyan-300">Your customer journey</p>
-            {['Discover your services', 'Find opening hours and contact details', 'Ask about an appointment or service'].map(text => <p key={text} className="flex gap-3 text-sm leading-6"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" />{text}</p>)}
-            <p className="border-t border-slate-700 pt-4 text-xs leading-5 text-slate-400">Business details and integrations will be confirmed before launch.</p>
+  const [menuOpen, setMenuOpen] = useState(false);
+  const services = Array.isArray(lead.services) ? lead.services : [];
+  const design = presentationFor(lead.category);
+  const closeMenu = () => setMenuOpen(false);
+
+  return (
+    <div className={styles.root} data-tone={design.tone}>
+      <a className={styles.skipLink} href="#main-content">Skip to content</a>
+      <aside className={styles.conceptBar}>
+        <span>Website concept for review</span>
+        <span>Sample content · Not the business&apos;s official booking website</span>
+      </aside>
+
+      <header className={styles.header}>
+        <a className={styles.wordmark} href="#main-content">{lead.business_name}</a>
+        <button className={styles.menuToggle} aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="demo-navigation" onClick={() => setMenuOpen(!menuOpen)}>
+          {menuOpen ? <X size={18} strokeWidth={1.5} /> : <Menu size={18} strokeWidth={1.5} />}
+        </button>
+        <nav id="demo-navigation" aria-label="Main navigation" className={`${styles.navigation} ${menuOpen ? styles.navigationOpen : ''}`}>
+          <a href="#services" onClick={closeMenu}>The services</a>
+          <a className={styles.navAction} href="#enquiry" onClick={closeMenu}>Preview enquiry <ArrowRight size={16} strokeWidth={1.5} aria-hidden="true" /></a>
+        </nav>
+      </header>
+
+      <main id="main-content" className={styles.main}>
+        <section className={styles.hero} aria-labelledby="demo-headline">
+          <div className={styles.heroCopy}>
+            <p className={styles.eyebrow}><span className={styles.rule} />{lead.category || 'Local business'}{lead.city && <> / {lead.city}</>}</p>
+            <h1 id="demo-headline">{design.headline[0]}<br /><span>{design.headline[1]}</span></h1>
+            <p className={styles.heroDescription}>Get to know {lead.business_name}{lead.city ? ` in ${lead.city}` : ''}. Explore the services and see how a simple enquiry could begin.</p>
+            <div className={styles.heroActions}>
+              <a className={styles.primaryAction} href="#services">Explore the services <ArrowRight size={16} strokeWidth={1.5} aria-hidden="true" /></a>
+              <a className={styles.textAction} href="#enquiry">View sample enquiry</a>
+            </div>
+            <p className={styles.heroNote}>A proposed website, shaped around your business</p>
           </div>
-        </div>
-      </section>
-      <section id="services" className="space-y-6">
-        <h2 className="text-3xl font-semibold">Services at a glance</h2>
-        {lead.services_suggested && <p className="rounded-xl border border-amber-500/30 bg-amber-950/30 p-4 text-sm text-amber-200">Suggested service labels for this concept. Confirm these against the business's actual offering before sharing.</p>}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{services.map((service,index) => <article key={`${index}-${service}`} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-6"><span className={`text-sm ${theme?.accentText || 'text-cyan-300'}`}>{String(index+1).padStart(2,'0')}</span><h3 className="text-xl font-semibold">{service}</h3><p className="text-sm leading-6 text-slate-400">Add the business's confirmed description, availability and service information here.</p></article>)}</div>
-      </section>
-      <section id="enquiry" className="grid gap-8 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-10 md:grid-cols-2">
-        <div className="space-y-4"><h2 className="text-3xl font-semibold">A simple way to get in touch</h2><p className="text-sm leading-7 text-slate-300">This sample shows where an enquiry or appointment request could sit on your website. Forms, opening hours and contact details are finalized with the business.</p><p className="text-xs text-slate-400">Preview only. No customer requests are collected or sent.</p></div>
-        <form onSubmit={event=>{event.preventDefault();setPreview(true);}} className="space-y-4">
-          <label className="block text-sm">Name<input placeholder="Sample name" className="mt-2 min-h-11 w-full rounded-xl border border-slate-600 bg-slate-950 p-3 focus:outline-none focus:ring-2 focus:ring-cyan-300" /></label>
-          <label className="block text-sm">Enquiry<textarea placeholder="Sample enquiry" rows={3} className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-950 p-3 focus:outline-none focus:ring-2 focus:ring-cyan-300" /></label>
-          <button className={`min-h-11 rounded-xl px-5 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${theme?.buttonClass || 'bg-blue-600 text-white'}`}>Preview enquiry button</button>
-          {preview && <p role="status" className="text-sm text-cyan-200">Preview interaction only. No enquiry was sent.</p>}
-        </form>
-      </section>
-    </main>
-    <footer className="border-t border-slate-800 p-6 text-center text-xs text-slate-400">Website concept by SynergyTech Solutions. Content and business details require review.</footer>
-  </div>;
+
+          <div className={styles.serviceMenu}>
+            <div className={styles.menuMeta}><span>{design.menu}</span><span>Website concept</span></div>
+            <p className={styles.menuName}>{lead.business_name}</p>
+            <p className={styles.menuCategory}>{lead.category || 'Services & enquiries'}</p>
+            {lead.services_suggested && <p className={styles.menuDisclaimer}>Suggested services · To be confirmed</p>}
+            <div className={styles.menuServices}>
+              {services.slice(0, 3).map((service, index) => (
+                <a key={`${index}-${service}`} href="#services"><span className={styles.serviceNumber}>{index + 1}</span><span>{service}</span><ArrowRight size={16} strokeWidth={1.5} aria-hidden="true" /></a>
+              ))}
+              {!services.length && <p className={styles.emptyMenu}>The service list will be confirmed with the business.</p>}
+            </div>
+            <div className={styles.menuFooter}>
+              {lead.city ? <span><MapPin size={16} strokeWidth={1.5} aria-hidden="true" />{lead.city}</span> : <span>Business details to confirm</span>}
+              <span>Explore. Enquire.</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="services" className={styles.services} aria-labelledby="services-heading">
+          <div className={styles.sectionIntro}>
+            <p className={styles.sectionLabel}>The services</p>
+            <h2 id="services-heading">Find your<br />starting point.</h2>
+            <p>Take a look, then ask about the details that matter to you.</p>
+            {lead.services_suggested && <p className={styles.suggestionNote}>Suggested service labels for this concept. Confirm these against the business&apos;s actual offering before sharing.</p>}
+          </div>
+          <div className={styles.serviceList}>
+            {services.map((service, index) => (
+              <details key={`${index}-${service}`} className={styles.serviceDetail}>
+                <summary><span className={styles.listNumber}>{index + 1}</span><h3>{service}</h3><span className={styles.expandMark} aria-hidden="true">+</span></summary>
+                <div className={styles.serviceBody}><p>Service descriptions, availability and other details will be confirmed with {lead.business_name} before launch.</p><a className={styles.textAction} href="#enquiry">See a sample enquiry <ArrowRight size={16} strokeWidth={1.5} aria-hidden="true" /></a></div>
+              </details>
+            ))}
+            {!services.length && <p className={styles.emptyServices}>Service information will be added after review with the business.</p>}
+          </div>
+        </section>
+
+        <section id="enquiry" className={styles.enquiry} aria-labelledby="enquiry-heading">
+          <div className={styles.enquiryCopy}>
+            <p className={styles.sectionLabel}>{design.noun}</p>
+            <h2 id="enquiry-heading">Let&apos;s start with<br />a conversation.</h2>
+            <p>A short enquiry, a question about a service, or a first step towards an appointment. This is how it could look on your website.</p>
+            <p className={styles.previewNote}>Preview only. No customer requests are collected or sent. Contact details and opening hours require business approval.</p>
+          </div>
+          <form className={styles.form} onSubmit={event => { event.preventDefault(); setPreview(true); }}>
+            <p className={styles.formHeading}>A sample enquiry</p>
+            <label htmlFor="demo-name">Your name</label>
+            <input id="demo-name" name="sample-name" placeholder="Sample name" autoComplete="off" />
+            <label htmlFor="demo-enquiry">What would you like to ask?</label>
+            <textarea id="demo-enquiry" name="sample-enquiry" placeholder="Write a sample enquiry" rows={3} />
+            <button className={styles.primaryAction} type="submit">Preview enquiry button <ArrowRight size={16} strokeWidth={1.5} aria-hidden="true" /></button>
+            <p className={styles.formNote}>Try the button. This form is a demonstration.</p>
+            {preview && <p role="status" className={styles.formStatus}>Preview interaction only. No enquiry was sent.</p>}
+          </form>
+        </section>
+      </main>
+
+      <footer className={styles.footer}>
+        <p>{lead.business_name}</p>
+        <p>Website concept by SynergyTech Solutions<br />Content and business details require review.</p>
+      </footer>
+    </div>
+  );
 }
